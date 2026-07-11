@@ -2,6 +2,7 @@ import streamlit as st
 import pickle
 import pandas as pd
 import numpy as np
+from get_address_info import GetAddressInfo
 
 # Set up page configurations
 st.set_page_config(
@@ -31,6 +32,17 @@ operating time zone of a Bitcoin address based on its transactional behavioral f
 """)
 st.write("---")
 
+st.title("1. Data collection")
+btc_address = st.text_area(
+    label="Enter existing btc address",
+    height = 20
+)
+if st.button("Start heuristic clustering and data collection."):   
+    new_address = GetAddressInfo(btc_address,0)
+    new_address.address_write()
+st.write("---")
+
+st.title("2. Model")
 # Input Section
 user_input = st.text_area(
     label="Enter a data row (comma-separated):",
