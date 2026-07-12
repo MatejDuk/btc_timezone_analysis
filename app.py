@@ -2,8 +2,27 @@ import streamlit as st
 import pickle
 import pandas as pd
 import numpy as np
+import os
+import requests_cache
+import pymysql
+import datetime
 from get_address_info import GetAddressInfo
 from heuristic_clustering import HeuristicClustering
+
+session = requests_cache.CachedSession('api_cache', expire_after=datetime.timedelta(days=30))
+
+connection = pymysql.connect(
+            host="gateway01.eu-central-1.prod.aws.tidbcloud.com",
+            port=4000,
+            user=os.getenv("USER_DATABASE"),
+            password=os.getenv("PASSWORD_DATABASE"),
+            database="test", 
+            ssl_verify_cert=True,
+            ssl_verify_identity=True
+        )
+cursor = connection.cursor()
+
+a = 0
 
 # Set up page configurations
 st.set_page_config(
@@ -38,41 +57,38 @@ btc_address = st.text_input(
     label="Enter existing btc address"
 )
 
-if st.button("Start data collection for inserted address."):   
+if st.button("Start data collection and scraping"):   
     if btc_address:
         with st.spinner("Scraping blockchain data..."):
-            new_address = GetAddressInfo(btc_address, 0)
+            table_placeholder = st.empty()
+
+            new_address = GetAddressInfo(btc_address, a, connection, cursor, session)
             # Save the returned proxy pointer directly into session state
             new_address.address_write()
             a = new_address.a
             
             st.session_state.first_address = pd.DataFrame(
-                [[new_address.address, new_address.outgoing_count, new_address.incoming_count, "Inserted address"]], 
-                columns=["Address", "Number of outgoing txs", "Number of incoming txs", "Address source"]
+                [[new_address.address, new_address.outgoing_count, new_address.incoming_count, "Inserted address", 0]], 
+                columns=["Address", "Number of outgoing txs", "Number of incoming txs", "Address source", "Iteration"]
             )
-    else:
-        st.warning("Please provide a Bitcoin address first.")
+            table_placeholder.dataframe(st.session_state.first_address)
 
-# Persist the dataframe visual across page reruns
+            clust_scrapper = HeuristicClustering(btc_address, a, connection, cursor, session, table_placeholder)
+            addresses = clust_scrapper.heuristic_clus()
 
-if st.button("Start heuristic clustering"):
-    if btc_address:
-        with st.spinner("Executing multi-input and change address heuristics..."):
-            # Safely fetch the index from session state
-            clustering_agent = HeuristicClustering(
-                start_address=btc_address, 
-                start_ip_index=a
-            )
-            clustered_list = clustering_agent.heuristic_clus()
-            
-            st.success(f"Clustering finished! Found {len(clustered_list)} unique addresses.")
-            st.dataframe(pd.DataFrame(clustered_list, columns=["Clustered Addresses"]))
+            st.success("✅ Clustering successfully finished! All connected wallets have been scraped.")
+            st.write(addresses)
     else:
         st.warning("Please provide a Bitcoin address first.")
 
 st.write("---")
+st.title("2. Data Visualisation")
 
-st.title("2. Model Prediction")
+
+
+st.write("---")
+
+st.title("3. Model Prediction")
 # Input Section
 user_input = st.text_area(
     label="Enter a data row (comma-separated 24-hour vector ratios):",

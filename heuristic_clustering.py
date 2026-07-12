@@ -2,14 +2,16 @@ from get_address_info import GetAddressInfo
 import os
 import pymysql
 import pandas as pd
+import streamlit as st
 
 class HeuristicClustering:
-    def __init__(self, start_address, a, connection, cursor, session):
+    def __init__(self, start_address, a, connection, cursor, session, table_placeholder):
         self.start_address = start_address
         self.a = a
         self.connection = connection
         self.cursor = cursor
         self.session = session
+        self.table_placeholder = table_placeholder
 
 
         raw_ips = os.getenv("IP_ADDRESSES")
@@ -141,6 +143,18 @@ class HeuristicClustering:
                 scraper = GetAddressInfo(addr, self.a, self.connection, self.cursor, self.session)
                 scraper.address_write()
                 self.a = scraper.a
+                new_row = pd.DataFrame({
+                    "Address": [addr],
+                    "Number of outgoing txs": [scraper.outgoing_count],
+                    "Number of incoming txs": [scraper.incoming_count],
+                    "Address source": ["Heuristic Clustering"],
+                    "Iteration": [iteration]
+                })
+                st.session_state.first_address = pd.concat(
+                [st.session_state.first_address, new_row], 
+                ignore_index=True
+                )
+                self.table_placeholder.dataframe(st.session_state.first_address)
                 
                 self.written_addresses.append(addr)
 
