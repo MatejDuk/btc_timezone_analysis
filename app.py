@@ -8,6 +8,13 @@ import pymysql
 import datetime
 from get_address_info import GetAddressInfo
 from heuristic_clustering import HeuristicClustering
+from histogram import Histogram
+
+if "addresses" not in st.session_state:
+    st.session_state.addresses = []
+
+if "row" not in st.session_state:
+    st.session_state.row = None
 
 session = requests_cache.CachedSession('api_cache', expire_after=datetime.timedelta(days=30))
 
@@ -52,7 +59,12 @@ operating time zone of a Bitcoin address based on its transactional behavioral f
 """)
 st.write("---")
 
+
 st.title("1. Data collection")
+table_placeholder = st.empty()
+if "first_address" in st.session_state and st.session_state.first_address is not None:
+    table_placeholder.dataframe(st.session_state.first_address)
+
 btc_address = st.text_input(
     label="Enter existing btc address"
 )
@@ -60,7 +72,7 @@ btc_address = st.text_input(
 if st.button("Start data collection and scraping"):   
     if btc_address:
         with st.spinner("Scraping blockchain data..."):
-            table_placeholder = st.empty()
+            
 
             new_address = GetAddressInfo(btc_address, a, connection, cursor, session)
             # Save the returned proxy pointer directly into session state
@@ -74,55 +86,56 @@ if st.button("Start data collection and scraping"):
             table_placeholder.dataframe(st.session_state.first_address)
 
             clust_scrapper = HeuristicClustering(btc_address, a, connection, cursor, session, table_placeholder)
-            addresses = clust_scrapper.heuristic_clus()
+            clust_scrapper.heuristic_clus()
+
+            st.session_state.addresses = clust_scrapper.addresses
 
             st.success("✅ Clustering successfully finished! All connected wallets have been scraped.")
-            st.write(addresses)
+
     else:
         st.warning("Please provide a Bitcoin address first.")
+
+
 
 st.write("---")
 st.title("2. Data Visualisation")
 
+
+if st.button("Generate Transaction Histogram"):
+    # Check if we have addresses
+    if st.session_state.addresses:
+        with st.spinner("Analyzing transaction times..."):
+            hist_gen = Histogram(connection, cursor)
+            # Use the data from session_state
+            fig, table = hist_gen.create_histogram(st.session_state.addresses)
+            st.pyplot(fig)
+            st.write(table)
+            print(table.iloc[0].tolist())
+            st.session_state.row = table.iloc[0].tolist()
+    else:
+        st.warning("No addresses found. Run Data Collection first!")
 
 
 st.write("---")
 
 st.title("3. Model Prediction")
 # Input Section
-user_input = st.text_area(
-    label="Enter a data row (comma-separated 24-hour vector ratios):",
-    placeholder="0.01, 0.05, 0.12, 0.02, ...",
-    help="Provide the exact 24 numerical features corresponding to your transaction time distribution.",
-    height=150
-)
 
 if st.button("Calculate Probabilities"):
-    if user_input.strip():
-        try:
-            # Strip outer brackets cleanly if the user pasted a raw Python list format
-            clean_text = user_input.replace("[", "").replace("]", "")
-            row = [float(val.strip()) for val in clean_text.split(",") if val.strip()]
-            
-            if model is not None:
-                # Wrap row inside an outer list to pass a 2D array matrix to scikit-learn
-                y_row_proba = model.predict_proba([row])
-                
-                st.subheader("Predicted Time Zone Probabilities")
-                
-                # Turn the outputs into a legible dataframe mapping classes to probabilities
-                if hasattr(model, "classes_"):
-                    prob_df = pd.DataFrame(y_row_proba, columns=model.classes_)
-                    st.dataframe(prob_df)
-                else:
-                    st.write(y_row_proba)
-            else:
-                st.error("Model is not loaded.")
-                
-        except ValueError as e:
-            st.error(f"Data parsing failed: Ensure the row contains only numerical values. Details: {e}")
+    # Wrap row inside an outer list to pass a 2D array matrix to scikit-learn
+    y_row_proba = model.predict_proba([st.session_state.row])
+    
+    st.subheader("Predicted Time Zone Probabilities")
+    
+    # Turn the outputs into a legible dataframe mapping classes to probabilities
+    if hasattr(model, "classes_"):
+        prob_df = pd.DataFrame(y_row_proba, columns=model.classes_)
+        st.dataframe(prob_df)
     else:
-        st.warning("Please input a feature row vector before evaluating prediction probabilities.")
+        st.write(y_row_proba)
+        
+                
+   
 
 
 

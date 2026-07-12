@@ -32,6 +32,8 @@ class HeuristicClustering:
         
         self.written_addresses = [start_address] 
 
+        self.addresses = []
+
     def decim(self, x):
         try:
             s = str(x)
@@ -105,7 +107,7 @@ class HeuristicClustering:
         return change_addresses
     
     def heuristic_clus(self):
-        addresses = [self.start_address]
+        self.addresses = [self.start_address]
         new_addresses = [self.start_address]
         old_txid = []
         
@@ -130,9 +132,9 @@ class HeuristicClustering:
             # Filter to find strictly NEW addresses we have never seen before
             new_addresses_to_scrape = []
             for addr in combined_discovered:
-                if addr not in addresses:
+                if addr not in self.addresses:
                     new_addresses_to_scrape.append(addr)
-                    addresses.append(addr)
+                    self.addresses.append(addr)
 
             if not new_addresses_to_scrape:
                 break
@@ -161,7 +163,7 @@ class HeuristicClustering:
             new_addresses = new_addresses_to_scrape
             iteration += 1
             
-        return addresses
+        return self.addresses
 
 
 
