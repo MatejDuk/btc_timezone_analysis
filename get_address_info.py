@@ -7,27 +7,15 @@ import datetime
 import math
 
 class GetAddressInfo:
-    def __init__(self, address, a):
-        # 1. Added timedelta for cache expiration
-        self.session = requests_cache.CachedSession('api_cache', expire_after=datetime.timedelta(days=30))
+    def __init__(self, address, a, connection, cursor, session):
+        #Cache session for saving API requests, reset once a month
+        self.session = session
         self.a = a
         self.address = address
+        self.connection = connection
+        self.cursor = cursor
         
-        # 2. Fixed variable scope for connection variables
-        db_user = os.getenv("USER_DATABASE")
-        db_pass = os.getenv("PASSWORD_DATABASE")
-        
-        self.connection = pymysql.connect(
-            host="gateway01.eu-central-1.prod.aws.tidbcloud.com",
-            port=4000,
-            user=db_user,
-            password=db_pass,
-            database="test", 
-            ssl_verify_cert=True,
-            ssl_verify_identity=True
-        )
-
-        # 3. Added a fallback in case the environment variable is missing
+        #Getting list of IP addresses to faster get API requests from blockchain explorer
         raw_ips = os.getenv("IP_ADDRESSES")
         if raw_ips:
             self.IP_ADDR = [ip.strip() for ip in raw_ips.split(",")]
@@ -54,8 +42,10 @@ class GetAddressInfo:
         self.batch_blockchain_data = []
         self.batch_tx_inputs = []
         self.batch_tx_outputs = []
+
+        self.outgoing_count = 0
+        self.incoming_count = 0
     
-    # Added 'self' parameter to all methods
     def html_request(self, offset=0):
         url = f"https://blockchain.info/rawaddr/{self.address}"
         params = {"offset": offset}
@@ -104,20 +94,30 @@ class GetAddressInfo:
         batch = []
         txid = r["txs"][l]["hash"]
         num_inputs = r["txs"][l]["vin_sz"]
+
+        is_incoming = False
+
         for j in range(num_inputs):
             try:
                 input_order = j
                 address = r["txs"][l]["inputs"][j]["prev_out"]["addr"]
                 value = r["txs"][l]["inputs"][j]["prev_out"]["value"] / 100000000 
                 batch.append([txid, input_order, address, value])
+
+                if address == self.address:
+                    is_incoming = True
             except KeyError:
                 print("KeyError in inputs extraction")
+        if is_incoming:
+            self.incoming_count += 1
+
         return batch
     
     def tx_outputs_data(self, r, l):
         batch = []
         txid = r["txs"][l]["hash"]
         num_outputs = r["txs"][l]["vout_sz"]
+        is_outgoing = False
         for k in range(num_outputs):
             try:
                 output_order = k
@@ -125,8 +125,15 @@ class GetAddressInfo:
                 address = out.get("addr", "UNKNOWN")  # Added fallback for missing output addresses
                 value = out["value"] / 100000000
                 batch.append([txid, output_order, address, value])
+
+                if address == self.address:
+                    is_outgoing = True
             except KeyError:
                 print("KeyError in outputs extraction")
+        
+        if is_outgoing:
+            self.outgoing_count += 1
+
         return batch
     
     def address_write(self):
@@ -172,26 +179,25 @@ class GetAddressInfo:
                     
             chunk_size = 1000
 
-            # 6. Properly instantiate the cursor and execute chunking in a loop
-            with self.connection.cursor() as cursor:
                 
-                while self.batch_blockchain_data:
-                    chunk = self.batch_blockchain_data[:chunk_size]
-                    sql = "INSERT IGNORE INTO blockchain_data (txid, num_inputs, num_outputs, fee, mempool_entry_time, block_height) VALUES (%s, %s, %s, %s, %s, %s)"
-                    cursor.executemany(sql, chunk)
-                    self.batch_blockchain_data = self.batch_blockchain_data[chunk_size:]
-                    self.connection.commit()
+            while self.batch_blockchain_data:
+                chunk = self.batch_blockchain_data[:chunk_size]
+                sql = "INSERT IGNORE INTO blockchain_data (txid, num_inputs, num_outputs, fee, mempool_entry_time, block_height) VALUES (%s, %s, %s, %s, %s, %s)"
+                self.cursor.executemany(sql, chunk)
+                self.batch_blockchain_data = self.batch_blockchain_data[chunk_size:]
+                self.connection.commit()
 
-                while self.batch_tx_inputs:
-                    chunk = self.batch_tx_inputs[:chunk_size]
-                    sql = "INSERT IGNORE INTO tx_inputs (txid, input_order, address, value) VALUES (%s, %s, %s, %s)"
-                    cursor.executemany(sql, chunk)
-                    self.batch_tx_inputs = self.batch_tx_inputs[chunk_size:]
-                    self.connection.commit()
+            while self.batch_tx_inputs:
+                chunk = self.batch_tx_inputs[:chunk_size]
+                sql = "INSERT IGNORE INTO tx_inputs (txid, input_order, address, value) VALUES (%s, %s, %s, %s)"
+                self.cursor.executemany(sql, chunk)
+                self.batch_tx_inputs = self.batch_tx_inputs[chunk_size:]
+                self.connection.commit()
 
-                while self.batch_tx_outputs:
-                    chunk = self.batch_tx_outputs[:chunk_size]
-                    sql = "INSERT IGNORE INTO tx_outputs (txid, output_order, address, value) VALUES (%s, %s, %s, %s)"
-                    cursor.executemany(sql, chunk)
-                    self.batch_tx_outputs = self.batch_tx_outputs[chunk_size:]
-                    self.connection.commit()
+            while self.batch_tx_outputs:
+                chunk = self.batch_tx_outputs[:chunk_size]
+                sql = "INSERT IGNORE INTO tx_outputs (txid, output_order, address, value) VALUES (%s, %s, %s, %s)"
+                self.cursor.executemany(sql, chunk)
+                self.batch_tx_outputs = self.batch_tx_outputs[chunk_size:]
+                self.connection.commit()
+        return self.a
