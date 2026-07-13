@@ -132,6 +132,8 @@ if st.button("Calculate Probabilities"):
         st.dataframe(prob_df)
     else:
         st.write(y_row_proba)
+
+print("Hello")
         
                 
    
