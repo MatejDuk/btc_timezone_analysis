@@ -43,12 +43,14 @@ st.set_page_config(
 def load_model():
     try:
         with open('timezone_model.pkl', 'rb') as file:
-            return pickle.load(file)
-    except FileNotFoundError:
-        st.error("Model file 'timezone_model.pkl' not found. Please upload it to your repository.")
-        return None
+            data = pickle.load(file)
+            return data["model"], data["encoder"]
+    except Exception as e:
+        st.error(f"Error loading model: {e}")
+        return None, None
 
-model = load_model()
+# In your main code:
+model, encoder = load_model()
 
 # Header layout
 st.title("🌍 Bitcoin Time Zone Predictor")
@@ -121,19 +123,28 @@ st.title("3. Model Prediction")
 # Input Section
 
 if st.button("Calculate Probabilities"):
-    # Wrap row inside an outer list to pass a 2D array matrix to scikit-learn
-    y_row_proba = model.predict_proba([st.session_state.row])
-    
-    st.subheader("Predicted Time Zone Probabilities")
-    
-    # Turn the outputs into a legible dataframe mapping classes to probabilities
-    if hasattr(model, "classes_"):
-        prob_df = pd.DataFrame(y_row_proba, columns=model.classes_)
-        st.dataframe(prob_df)
+    if st.session_state.model_row:
+        y_row_proba = model.predict_proba([st.session_state.model_row])[0]
+        
+        # Use the encoder to get the original class names
+        class_names = encoder.classes_
+        
+        # Create a clean DataFrame
+        prob_df = pd.DataFrame({
+            "Time Zone": class_names,
+            "Probability": y_row_proba
+        }).sort_values(by="Probability", ascending=False)
+        
+        # Visualization
+        st.subheader("Predicted Time Zone Probabilities")
+        
+        # Display as a horizontal bar chart
+        st.bar_chart(prob_df, x="Time Zone", y="Probability", color="Probability")
+        
+        # Optional: Show table underneath
+        st.dataframe(prob_df.set_index("Time Zone"))
     else:
-        st.write(y_row_proba)
-
-print("Hello")
+        st.warning("Please analyze data first.")
         
                 
    
