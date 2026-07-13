@@ -24,8 +24,7 @@ connection = pymysql.connect(
             user=os.getenv("USER_DATABASE"),
             password=os.getenv("PASSWORD_DATABASE"),
             database="test", 
-            ssl_verify_cert=True,
-            ssl_verify_identity=True
+            ssl={'ssl_verify_cert': False}
         )
 cursor = connection.cursor()
 
