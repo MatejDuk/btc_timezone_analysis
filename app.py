@@ -24,7 +24,7 @@ if "model_row" not in st.session_state:
 session = requests_cache.CachedSession('api_cache', expire_after=datetime.timedelta(days=30))
 
 connection = pymysql.connect(
-            host="gateway01.eu-central-1.prod.aws.tidbcloud.com",
+            host="gateway01.us-east-1.prod.aws.tidbcloud.com",
             port=4000,
             user=os.getenv("USER_DATABASE"),
             password=os.getenv("PASSWORD_DATABASE"),
