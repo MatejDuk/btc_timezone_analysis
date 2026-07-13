@@ -16,6 +16,11 @@ if "addresses" not in st.session_state:
 if "row" not in st.session_state:
     st.session_state.row = None
 
+if "fig" not in st.session_state: 
+    st.session_state.fig = None
+if "model_row" not in st.session_state: 
+    st.session_state.model_row = None
+
 session = requests_cache.CachedSession('api_cache', expire_after=datetime.timedelta(days=30))
 
 connection = pymysql.connect(
@@ -103,18 +108,27 @@ st.title("2. Data Visualisation")
 
 
 if st.button("Generate Transaction Histogram"):
-    # Check if we have addresses
     if st.session_state.addresses:
-        with st.spinner("Analyzing transaction times..."):
+        # Use st.status for process tracking
+        with st.status("Analyzing transactions...", expanded=True) as status:
+            st.write("Initializing Histogram class...")
             hist_gen = Histogram(connection, cursor)
-            # Use the data from session_state
+            
+            st.write("Calculating transaction distribution...")
             fig, table = hist_gen.create_histogram(st.session_state.addresses)
-            st.pyplot(fig)
-            st.write(table)
-            print(table.iloc[0].tolist())
-            st.session_state.row = table.iloc[0].tolist()
+            
+            # Save to session state so they persist across reruns
+            st.session_state.fig = fig
+            st.session_state.model_row = table.iloc[0].tolist()
+            
+            status.update(label="✅ Analysis complete!", state="complete", expanded=False)
     else:
         st.warning("No addresses found. Run Data Collection first!")
+
+# Always display the histogram if it exists in state
+if st.session_state.fig:
+    st.pyplot(st.session_state.fig)
+    st.write("Model Input Vector Prepared.")
 
 
 st.write("---")
@@ -124,30 +138,27 @@ st.title("3. Model Prediction")
 
 if st.button("Calculate Probabilities"):
     if st.session_state.model_row:
-        y_row_proba = model.predict_proba([st.session_state.model_row])[0]
+        # Get probabilities
+        probs = model.predict_proba([st.session_state.model_row])[0]
         
-        # Use the encoder to get the original class names
-        class_names = encoder.classes_
+        # Determine labels: Use encoder if available, otherwise use index numbers
+        if encoder:
+            class_names = encoder.classes_
+        else:
+            class_names = [f"Class {i}" for i in range(len(probs))]
         
-        # Create a clean DataFrame
+        # Prepare DataFrame for visualization
         prob_df = pd.DataFrame({
             "Time Zone": class_names,
-            "Probability": y_row_proba
-        }).sort_values(by="Probability", ascending=False)
+            "Confidence": probs
+        }).sort_values(by="Confidence", ascending=False)
         
-        # Visualization
         st.subheader("Predicted Time Zone Probabilities")
         
-        # Display as a horizontal bar chart
-        st.bar_chart(prob_df, x="Time Zone", y="Probability", color="Probability")
+        # Horizontal bar chart is cleaner for label visibility
+        st.bar_chart(prob_df, x="Time Zone", y="Confidence", horizontal=True)
         
-        # Optional: Show table underneath
+        # Display table for precision
         st.dataframe(prob_df.set_index("Time Zone"))
     else:
-        st.warning("Please analyze data first.")
-        
-                
-   
-
-
-
+        st.error("Please analyze data first.")
