@@ -13,7 +13,6 @@ class HeuristicClustering:
         self.session = session
         self.table_placeholder = table_placeholder
 
-
         raw_ips = os.getenv("IP_ADDRESSES")
         self.IP_ADDR = [ip.strip() for ip in raw_ips.split(",")] if raw_ips else []
         self.proxies_dict_list = []
@@ -29,9 +28,7 @@ class HeuristicClustering:
                 pass 
             
         self.length_of_ip_a = len(self.proxies_dict_list)
-        
         self.written_addresses = [start_address] 
-
         self.addresses = []
 
     def decim(self, x):
@@ -96,7 +93,7 @@ class HeuristicClustering:
                 
                 address_candidates = output_info[output_info["decim"] == max_dec]["address"]
                 
-                if len(address_candidates) == 1:
+                if len_address_candidates := len(address_candidates) == 1:
                     address = address_candidates.iloc[0]
                     less_than_max = output_info[output_info["decim"] < max_dec]["decim"]
                     second_max = less_than_max.max() if not less_than_max.empty else 0
@@ -114,6 +111,7 @@ class HeuristicClustering:
         iteration = 1
         
         while True:
+            # 1. Gather all txids associated with the new layer of addresses in one round-trip
             placeholders = ','.join(['%s'] * len(new_addresses))
             query = f"SELECT DISTINCT txid FROM tx_inputs WHERE address IN ({placeholders})"
             self.cursor.execute(query, new_addresses)
@@ -121,15 +119,15 @@ class HeuristicClustering:
             fetched_txids = [x[0] for x in self.cursor.fetchall()]
             current_txids = list(set(fetched_txids) - set(old_txid))
             
+            if not current_txids:
+                break
                 
             input_addresses = self.inputs_analysis(current_txids)
             change_addresses = self.change_analysis(current_txids)
             
-            # Combine both lists and remove duplicates immediately
             combined_discovered = list(set(input_addresses + change_addresses))
             old_txid.extend(current_txids)
             
-            # Filter to find strictly NEW addresses we have never seen before
             new_addresses_to_scrape = []
             for addr in combined_discovered:
                 if addr not in self.addresses:
@@ -139,26 +137,32 @@ class HeuristicClustering:
             if not new_addresses_to_scrape:
                 break
 
+            # Use an in-memory list to accumulate data points for this iteration's batch
+            batch_rows = []
             
-            for i, addr in enumerate(new_addresses_to_scrape):
-                
+            for addr in new_addresses_to_scrape:
                 scraper = GetAddressInfo(addr, self.a, self.connection, self.cursor, self.session)
                 scraper.address_write()
                 self.a = scraper.a
-                new_row = pd.DataFrame({
-                    "Address": [addr],
-                    "Number of outgoing txs": [scraper.outgoing_count],
-                    "Number of incoming txs": [scraper.incoming_count],
-                    "Address source": ["Heuristic Clustering"],
-                    "Iteration": [iteration]
+                
+                # Append raw dicts instead of converting to DataFrame immediately
+                batch_rows.append({
+                    "Address": addr,
+                    "Number of outgoing txs": scraper.outgoing_count,
+                    "Number of incoming txs": scraper.incoming_count,
+                    "Address source": "Heuristic Clustering",
+                    "Iteration": iteration
                 })
+                self.written_addresses.append(addr)
+
+            # 2. Batch-update the UI once per iteration layer instead of per address
+            if batch_rows:
+                new_df = pd.DataFrame(batch_rows)
                 st.session_state.first_address = pd.concat(
-                [st.session_state.first_address, new_row], 
-                ignore_index=True
+                    [st.session_state.first_address, new_df], 
+                    ignore_index=True
                 )
                 self.table_placeholder.dataframe(st.session_state.first_address)
-                
-                self.written_addresses.append(addr)
 
             new_addresses = new_addresses_to_scrape
             iteration += 1
