@@ -3,6 +3,7 @@ import os
 import pymysql
 import pandas as pd
 import streamlit as st
+import concurrent.futures
 
 class HeuristicClustering:
     def __init__(self, start_address, a, connection, cursor, session, table_placeholder):
@@ -93,7 +94,7 @@ class HeuristicClustering:
                 
                 address_candidates = output_info[output_info["decim"] == max_dec]["address"]
                 
-                if len_address_candidates := len(address_candidates) == 1:
+                if len(address_candidates) == 1:
                     address = address_candidates.iloc[0]
                     less_than_max = output_info[output_info["decim"] < max_dec]["decim"]
                     second_max = less_than_max.max() if not less_than_max.empty else 0
@@ -107,11 +108,9 @@ class HeuristicClustering:
         self.addresses = [self.start_address]
         new_addresses = [self.start_address]
         old_txid = []
-        
         iteration = 1
         
         while True:
-            # 1. Gather all txids associated with the new layer of addresses in one round-trip
             placeholders = ','.join(['%s'] * len(new_addresses))
             query = f"SELECT DISTINCT txid FROM tx_inputs WHERE address IN ({placeholders})"
             self.cursor.execute(query, new_addresses)
@@ -137,25 +136,74 @@ class HeuristicClustering:
             if not new_addresses_to_scrape:
                 break
 
-            # Use an in-memory list to accumulate data points for this iteration's batch
-            batch_rows = []
+            # --- MULTITHREADED API SCRAPING ---
+            completed_scrapers = []
             
-            for addr in new_addresses_to_scrape:
-                scraper = GetAddressInfo(addr, self.a, self.connection, self.cursor, self.session)
-                scraper.address_write()
-                self.a = scraper.a
+            # Helper function to execute inside the thread pool
+            def scrape_worker(index_and_address):
+                idx, addr = index_and_address
+                # Distribute proxies fairly across concurrent workers
+                proxy_index = (self.a + idx) % max(1, self.length_of_ip_a)
                 
-                # Append raw dicts instead of converting to DataFrame immediately
+                scraper = GetAddressInfo(addr, proxy_index, self.proxies_dict_list, self.session)
+                scraper.fetch_and_extract()
+                return scraper
+
+            # Use up to 20 threads to fetch transactions concurrently
+            max_workers = min(20, len(new_addresses_to_scrape))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Pack addresses with an index so proxies distribute evenly
+                jobs = list(enumerate(new_addresses_to_scrape))
+                completed_scrapers = list(executor.map(scrape_worker, jobs))
+
+            # Maintain the global proxy rotation index offset
+            self.a = (self.a + len(new_addresses_to_scrape)) % max(1, self.length_of_ip_a)
+
+            # --- BULK DATABASE WRITING & UI UPDATING ---
+            master_blockchain_data = []
+            master_tx_inputs = []
+            master_tx_outputs = []
+            batch_rows = []
+
+            for scraper in completed_scrapers:
+                master_blockchain_data.extend(scraper.batch_blockchain_data)
+                master_tx_inputs.extend(scraper.batch_tx_inputs)
+                master_tx_outputs.extend(scraper.batch_tx_outputs)
+                
                 batch_rows.append({
-                    "Address": addr,
+                    "Address": scraper.address,
                     "Number of outgoing txs": scraper.outgoing_count,
                     "Number of incoming txs": scraper.incoming_count,
                     "Address source": "Heuristic Clustering",
                     "Iteration": iteration
                 })
-                self.written_addresses.append(addr)
+                self.written_addresses.append(scraper.address)
 
-            # 2. Batch-update the UI once per iteration layer instead of per address
+            # Write everything to SQL in optimized chunks
+            chunk_size = 2000
+            
+            while master_blockchain_data:
+                chunk = master_blockchain_data[:chunk_size]
+                sql = "INSERT IGNORE INTO blockchain_data (txid, num_inputs, num_outputs, fee, mempool_entry_time, block_height) VALUES (%s, %s, %s, %s, %s, %s)"
+                self.cursor.executemany(sql, chunk)
+                master_blockchain_data = master_blockchain_data[chunk_size:]
+                self.connection.commit()
+
+            while master_tx_inputs:
+                chunk = master_tx_inputs[:chunk_size]
+                sql = "INSERT IGNORE INTO tx_inputs (txid, input_order, address, value) VALUES (%s, %s, %s, %s)"
+                self.cursor.executemany(sql, chunk)
+                master_tx_inputs = master_tx_inputs[chunk_size:]
+                self.connection.commit()
+
+            while master_tx_outputs:
+                chunk = master_tx_outputs[:chunk_size]
+                sql = "INSERT IGNORE INTO tx_outputs (txid, output_order, address, value) VALUES (%s, %s, %s, %s)"
+                self.cursor.executemany(sql, chunk)
+                master_tx_outputs = master_tx_outputs[chunk_size:]
+                self.connection.commit()
+
+            # Render UI updates once per iteration layer
             if batch_rows:
                 new_df = pd.DataFrame(batch_rows)
                 st.session_state.first_address = pd.concat(
