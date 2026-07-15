@@ -6,12 +6,10 @@ import datetime
 import math
 
 class GetAddressInfo:
-    def __init__(self, address, a, proxies_list, session):
+    def __init__(self, address, session):
         self.session = session
-        self.a = a
         self.address = address
-        self.proxies_dict_list = proxies_list
-        self.length_of_ip_a = len(proxies_list)
+        self.api_key = os.getenv("API_KEY")
         
         self.batch_blockchain_data = []
         self.batch_tx_inputs = []
@@ -21,126 +19,65 @@ class GetAddressInfo:
         self.incoming_count = 0
     
     def html_request(self, offset=0):
-        url = f"https://blockchain.info/rawaddr/{self.address}"
-        params = {"offset": offset}
+        url = f"https://api.tatum.io/v3/bitcoin/transaction/address/{self.address}"
+        params = {
+            "pageSize": 50,
+            "offset": offset,
+            }
+        headers = {
+            "accept": "application/json",
+            "x-api-key": self.api_key
+            }
+
         test = True
         j = 0
-        
+        start_time = time.time()
         while test:
             j += 1
             try:
-                # Safely fallback to unproxied requests if no proxies exist
-                proxy = self.proxies_dict_list[self.a] if self.length_of_ip_a > 0 else None
-                r = self.session.get(url, proxies=proxy, timeout=(10, 90), params=params)
+                r = self.session.get(url, timeout=(10, 90), params=params, headers = headers)
                 r = r.json()
-                
-                if "n_tx" not in r:
-                    raise ValueError("n_tx missing from response")
                     
                 test = False
                 
             except Exception as e:
                 print(f"Attempt {j} error on {self.address}: {e}")
-                time.sleep(2)  # Reduced delay for parallel threading speed
-                
-                if self.length_of_ip_a > 0:
-                    self.a = (self.a + 1) % self.length_of_ip_a
-                else:
-                    test = False  # Break loop if we don't have proxies to rotate
-                    
+                time.sleep(2) 
+        end_time = time.time()
+        print(end_time-start_time)
         return r
-    
-    def blockchain_data_data(self, r, l):
-        txid = r["txs"][l]["hash"]
-        num_inputs = r["txs"][l]["vin_sz"]
-        num_outputs = r["txs"][l]["vout_sz"]
-        fee = r["txs"][l]["fee"] / r["txs"][l]["size"]
-        
-        mempool_entry_time = r["txs"][l]["time"]
-        mempool_entry_time = datetime.datetime.fromtimestamp(
-            mempool_entry_time, 
-            tz=datetime.timezone.utc
-        ).strftime("%Y-%m-%d %H:%M:%S")
-        
-        block_height = r["txs"][l]["block_height"]
-        return [txid, num_inputs, num_outputs, fee, mempool_entry_time, block_height]
-    
-    def tx_inputs_data(self, r, l):
-        batch = []
-        txid = r["txs"][l]["hash"]
-        num_inputs = r["txs"][l]["vin_sz"]
-        is_incoming = False
-
-        for j in range(num_inputs):
-            try:
-                input_order = j
-                address = r["txs"][l]["inputs"][j]["prev_out"]["addr"]
-                value = r["txs"][l]["inputs"][j]["prev_out"]["value"] / 100000000 
-                batch.append([txid, input_order, address, value])
-
-                if address == self.address:
-                    is_incoming = True
-            except KeyError:
-                pass
-                
-        if is_incoming:
-            self.incoming_count += 1
-
-        return batch
-    
-    def tx_outputs_data(self, r, l):
-        batch = []
-        txid = r["txs"][l]["hash"]
-        num_outputs = r["txs"][l]["vout_sz"]
-        is_outgoing = False
-        
-        for k in range(num_outputs):
-            try:
-                output_order = k
-                out = r["txs"][l]["out"][k]
-                address = out.get("addr", "UNKNOWN")
-                value = out["value"] / 100000000
-                batch.append([txid, output_order, address, value])
-
-                if address == self.address:
-                    is_outgoing = True
-            except KeyError:
-                pass
-        
-        if is_outgoing:
-            self.outgoing_count += 1
-
-        return batch
     
     def fetch_and_extract(self):
         """Fetches the raw API details and extracts datasets into internal batches."""
-        if self.length_of_ip_a > 0 and self.a >= self.length_of_ip_a:
-            self.a = 0
             
         r = self.html_request(offset=0)
         
-        if r["n_tx"] > 0:
-            iteracie = min(r["n_tx"], 100)
-                
-            for l in range(iteracie):
-                self.batch_blockchain_data.append(self.blockchain_data_data(r, l))
-                self.batch_tx_inputs += self.tx_inputs_data(r, l)
-                self.batch_tx_outputs += self.tx_outputs_data(r, l)
-            
-            if r["n_tx"] > 100:
-                dodatocne_iteracie = math.floor(r["n_tx"] / 100)
-                offset = 100
-                for m in range(dodatocne_iteracie):
-                    iteracie = r["n_tx"] % 100 if (m + 1) == dodatocne_iteracie else 100
+        if len(r) < 50:   
+            for row in r:
+                #Blockchain data
+                txid = row["hash"]
+                num_inputs = len(row["inputs"])
+                num_outputs = len(row["outputs"])
+                fee = row["fee"]
+                #This time is only for block acceptance
+                mempool_entry_time = datetime.datetime.fromtimestamp(
+                    row["time"], 
+                    tz=datetime.timezone.utc
+                ).strftime("%Y-%m-%d %H:%M:%S")
+                block_height = row["blockNumber"]
+                self.batch_blockchain_data.append([txid, num_inputs, num_outputs, fee, mempool_entry_time, block_height])
 
-                    if self.length_of_ip_a > 0:
-                        self.a = (self.a + 1) % self.length_of_ip_a
-                        
-                    r = self.html_request(offset=offset)
-                            
-                    for l in range(iteracie):
-                        self.batch_blockchain_data.append(self.blockchain_data_data(r, l))
-                        self.batch_tx_inputs += self.tx_inputs_data(r, l)
-                        self.batch_tx_outputs += self.tx_outputs_data(r, l)
-                        
-                    offset += 100
+                #Inputs
+                for i,input in enumerate(row["inputs"]):
+                    input_order = i
+                    address = input["coin"]["address"]
+                    value = input["coin"]["value"] / 100000000
+                    self.batch_tx_inputs([txid, input_order, address, value])
+
+                #Outputs
+                for i,output in enumerate(row["outputs"]):
+                    output_order = i
+                    address = output["address"]
+                    value = output["value"] /  100000000
+                    self.batch_tx_outputs([txid, output_order, address, value])
+            
