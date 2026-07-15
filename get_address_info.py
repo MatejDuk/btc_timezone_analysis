@@ -35,7 +35,7 @@ class GetAddressInfo:
         while test:
             j += 1
             try:
-                r = self.session.get(url, timeout=(10, 90), params=params, headers = headers)
+                r = self.session.get(url, timeout=(10, 10), params=params, headers = headers)
                 r = r.json()
                 
             except Exception as e:
@@ -50,10 +50,18 @@ class GetAddressInfo:
     def fetch_and_extract(self):
         """Fetches the raw API details and extracts datasets into internal batches."""
             
-        r = self.html_request(offset=0)
-        
-        if len(r) < 50:   
+        offset = 0
+        test = True
+        while test: 
+            r = self.html_request(offset)
+            if len(r) == 50:
+                offset += 50
+            else: 
+                test = False
+
             for row in r:
+                incoming = False
+                outgoing = False
                 #Blockchain data
                 txid = row["hash"]
                 num_inputs = len(row["inputs"])
@@ -73,6 +81,8 @@ class GetAddressInfo:
                     address = input["coin"]["address"]
                     value = input["coin"]["value"] / 100000000
                     self.batch_tx_inputs.append([txid, input_order, address, value])
+                    if address == self.address:
+                        outgoing = True
 
                 #Outputs
                 for i,output in enumerate(row["outputs"]):
@@ -80,4 +90,10 @@ class GetAddressInfo:
                     address = output["address"]
                     value = output["value"] /  100000000
                     self.batch_tx_outputs.append([txid, output_order, address, value])
-            
+                    if address == self.address:
+                        incoming = True
+                
+                if outgoing:
+                    self.outgoing_count += 1
+                if incoming:
+                    self.incoming_count += 1
