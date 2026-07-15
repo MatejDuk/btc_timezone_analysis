@@ -37,12 +37,12 @@ class GetAddressInfo:
             try:
                 r = self.session.get(url, timeout=(10, 90), params=params, headers = headers)
                 r = r.json()
-                    
-                test = False
                 
             except Exception as e:
                 print(f"Attempt {j} error on {self.address}: {e}")
                 time.sleep(2) 
+            else:
+                break
         end_time = time.time()
         print(end_time-start_time)
         return r
@@ -72,12 +72,12 @@ class GetAddressInfo:
                     input_order = i
                     address = input["coin"]["address"]
                     value = input["coin"]["value"] / 100000000
-                    self.batch_tx_inputs([txid, input_order, address, value])
+                    self.batch_tx_inputs.append([txid, input_order, address, value])
 
                 #Outputs
                 for i,output in enumerate(row["outputs"]):
                     output_order = i
                     address = output["address"]
                     value = output["value"] /  100000000
-                    self.batch_tx_outputs([txid, output_order, address, value])
+                    self.batch_tx_outputs.append([txid, output_order, address, value])
             
