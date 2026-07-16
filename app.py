@@ -84,6 +84,7 @@ if st.button("Start data collection and scraping"):
                 columns=["Address", "Number of outgoing txs", "Number of incoming txs", "Address source", "Iteration"]
             )
             table_placeholder.dataframe(st.session_state.first_address)
+            st.session_state.write = None
 
             heur = HeuristicClustering(btc_address, connection,cursor, session,table_placeholder)
 
