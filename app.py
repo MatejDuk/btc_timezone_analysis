@@ -114,7 +114,7 @@ if st.button("Generate Transaction Histogram"):
             
             # Save to session state so they persist across reruns
             st.session_state.fig = fig
-            st.session_state.model_row = table.iloc[0].tolist()
+            st.session_state.model_row = table
             
             status.update(label="✅ Analysis complete!", state="complete", expanded=False)
     else:
@@ -123,6 +123,7 @@ if st.button("Generate Transaction Histogram"):
 # Always display the histogram if it exists in state
 if st.session_state.fig:
     st.pyplot(st.session_state.fig)
+    st.dataframe(st.session_state.model_row)
     st.write("Model Input Vector Prepared.")
 
 st.write("---")
