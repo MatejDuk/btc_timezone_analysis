@@ -26,6 +26,9 @@ if "fig" not in st.session_state:
 if "model_row" not in st.session_state: 
     st.session_state.model_row = None
 
+if "transactions_count" not in st.session_state:
+    st.session_state.transactions_count = 0
+
 # Cache session for saving API requests (expires after 30 days)
 session = requests_cache.CachedSession('api_cache', expire_after=datetime.timedelta(days=30))
 
@@ -110,11 +113,12 @@ if st.button("Generate Transaction Histogram"):
             hist_gen = Histogram(connection, cursor)
             
             st.write("Calculating transaction distribution...")
-            fig, table = hist_gen.create_histogram(st.session_state.addresses)
+            fig, table, trans = hist_gen.create_histogram(st.session_state.addresses)
             
             # Save to session state so they persist across reruns
             st.session_state.fig = fig
             st.session_state.model_row = table
+            st.session_state.transactions_count = trans
             
             status.update(label="✅ Analysis complete!", state="complete", expanded=False)
     else:
@@ -124,7 +128,7 @@ if st.button("Generate Transaction Histogram"):
 if st.session_state.fig:
     st.pyplot(st.session_state.fig)
     st.dataframe(st.session_state.model_row)
-    st.write("Model Input Vector Prepared.")
+    st.write(f"Model Input Vector Prepared ({st.session_state.transactions_count}). You can download the data")
 
 st.write("---")
 st.title("3. Model Prediction")

@@ -47,4 +47,4 @@ class Histogram:
         ax.set_xlabel("Hour of Day")
         ax.set_ylabel("Number of transactions")
 
-        return fig, model_df
+        return fig, model_df, total_transactions
