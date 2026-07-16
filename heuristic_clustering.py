@@ -66,7 +66,7 @@ class HeuristicClustering:
                 break
         end_time = time.time()
         #print(end_time-start_time)
-        print(address)
+        #print(address)
         return r
     
     

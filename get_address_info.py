@@ -45,7 +45,7 @@ class GetAddressInfo:
                 break
         end_time = time.time()
         #print(end_time-start_time)
-        print(self.address)
+        #print(self.address)
         return r
     
     def fetch_and_extract(self):
@@ -67,7 +67,7 @@ class GetAddressInfo:
                 try:
                     txid = row["hash"]
                 except:
-                    continue
+                    txid = ""
                 num_inputs = len(row["inputs"])
                 num_outputs = len(row["outputs"])
                 fee = row["fee"]
