@@ -14,6 +14,9 @@ from histogram import Histogram
 if "addresses" not in st.session_state:
     st.session_state.addresses = []
 
+if "write" not in st.session_state:
+    st.session_state.write = None
+
 if "row" not in st.session_state:
     st.session_state.row = None
 
@@ -36,23 +39,6 @@ connection = pymysql.connect(
     ssl={'ssl_verify_cert': False}
 )
 cursor = connection.cursor()
-
-# Parse proxies for the initial address scraping
-raw_ips = os.getenv("IP_ADDRESSES")
-ip_addresses = [ip.strip() for ip in raw_ips.split(",")] if raw_ips else []
-proxies_list = []
-
-for line in ip_addresses:
-    try:
-        ip, port, user, pwd = line.split(":")
-        proxies_list.append({
-            "http": f"http://{user}:{pwd}@{ip}:{port}",
-            "https": f"http://{user}:{pwd}@{ip}:{port}"
-        })
-    except ValueError:
-        pass
-
-a = 0
 
 # Set up page configurations
 st.set_page_config(
@@ -84,8 +70,8 @@ st.write("---")
 
 st.title("1. Data collection")
 table_placeholder = st.empty()
-if "first_address" in st.session_state and st.session_state.first_address is not None:
-    table_placeholder.dataframe(st.session_state.first_address)
+if "write" in st.session_state and st.session_state.write is not None:
+    table_placeholder.dataframe(st.session_state.write)
 
 btc_address = st.text_input(
     label="Enter existing btc address"
@@ -94,52 +80,24 @@ btc_address = st.text_input(
 if st.button("Start data collection and scraping"):   
     if btc_address:
         with st.spinner("Scraping starting address and connected transaction history..."):
-            
-            # 1. Initialize and run the starting address scraper (using in-memory parsing)
-            new_address = GetAddressInfo(btc_address, a, proxies_list, session)
-            new_address.fetch_and_extract()
-            a = new_address.a  # Carry forward the updated proxy index
-            
-            # 2. Bulk-insert the starting address data so Heuristic Clustering can read it
-            chunk_size = 2000
-            
-            while new_address.batch_blockchain_data:
-                chunk = new_address.batch_blockchain_data[:chunk_size]
-                sql = "INSERT IGNORE INTO blockchain_data (txid, num_inputs, num_outputs, fee, mempool_entry_time, block_height) VALUES (%s, %s, %s, %s, %s, %s)"
-                cursor.executemany(sql, chunk)
-                new_address.batch_blockchain_data = new_address.batch_blockchain_data[chunk_size:]
-                connection.commit()
-
-            while new_address.batch_tx_inputs:
-                chunk = new_address.batch_tx_inputs[:chunk_size]
-                sql = "INSERT IGNORE INTO tx_inputs (txid, input_order, address, value) VALUES (%s, %s, %s, %s)"
-                cursor.executemany(sql, chunk)
-                new_address.batch_tx_inputs = new_address.batch_tx_inputs[chunk_size:]
-                connection.commit()
-
-            while new_address.batch_tx_outputs:
-                chunk = new_address.batch_tx_outputs[:chunk_size]
-                sql = "INSERT IGNORE INTO tx_outputs (txid, output_order, address, value) VALUES (%s, %s, %s, %s)"
-                cursor.executemany(sql, chunk)
-                new_address.batch_tx_outputs = new_address.batch_tx_outputs[chunk_size:]
-                connection.commit()
-
-            # 3. Render the initial starting row in Streamlit
-            st.session_state.first_address = pd.DataFrame(
-                [[new_address.address, new_address.outgoing_count, new_address.incoming_count, "Inserted address", 0]], 
+            st.session_state.first_address = pd.DataFrame( 
                 columns=["Address", "Number of outgoing txs", "Number of incoming txs", "Address source", "Iteration"]
             )
             table_placeholder.dataframe(st.session_state.first_address)
 
-            # 4. Trigger parallelized, bulk heuristic clustering
-            clust_scrapper = HeuristicClustering(btc_address, a, connection, cursor, session, table_placeholder)
-            clust_scrapper.heuristic_clus()
+            heur = HeuristicClustering(btc_address, connection,cursor, session,table_placeholder)
 
-            st.session_state.addresses = clust_scrapper.addresses
+            heur.heuristic_clus()
+
+            st.session_state.addresses = heur.old_addresses
+
+            
             st.success("✅ Clustering successfully finished! All connected wallets have been scraped.")
 
     else:
         st.warning("Please provide a Bitcoin address first.")
+
+
 
 st.write("---")
 st.title("2. Data Visualisation")

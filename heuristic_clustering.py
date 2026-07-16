@@ -7,13 +7,13 @@ import concurrent.futures
 import time
 
 class HeuristicClustering:
-    def __init__(self, start_address, session):
+    def __init__(self, start_address, connection, cursor, session, table_placeholder):
         self.start_address = start_address
-        #self.connection = connection
-        #self.cursor = cursor
+        self.connection = connection
+        self.cursor = cursor
         self.session = session
         self.api_key = os.getenv("API_KEY")
-        #self.table_placeholder = table_placeholder
+        self.table_placeholder = table_placeholder
 
         self.new_iteration = []
 
@@ -24,6 +24,8 @@ class HeuristicClustering:
         self.inputs = []
         self.outputs = []
         self.blockchain = []
+
+        self.write = pd.DataFrame(columns = ["Address", "Number of outgoing txs", "Number of incoming txs", "Address source", "Iteration"])
 
     def decim(self, x):
         try:
@@ -116,25 +118,93 @@ class HeuristicClustering:
                 if count == 1:
                     change_addresses.append(cha)
         return change_addresses
+
+    def execute_batch_insert(self, sql, data, batch_size=500):
+        """Batches data to avoid MySQL packet size limits and connection drops."""
+        for i in range(0, len(data), batch_size):
+            batch = data[i : i + batch_size]
+            try:
+                self.cursor.executemany(sql, batch)
+                self.connection.commit()
+            except Exception as e:
+                print(f"Error at batch {i}: {e}")
+                self.connection.rollback()
+                raise
     
     
     def heuristic_clus(self):
         self.new_iteration = [self.start_address]
         iteration = 0 
+        input_addresses = []
+        change_addresses = []
+        self.old_addresses = [self.start_address]
+
         while True:
             for address in self.new_iteration:
-                new_addresses_info = GetAddressInfo(self.start_address, self.session)
+                new_addresses_info = GetAddressInfo(address, self.session)
                 new_addresses_info.fetch_and_extract()
                 self.inputs += new_addresses_info.batch_tx_inputs
                 self.outputs += new_addresses_info.batch_tx_outputs
                 self.blockchain += new_addresses_info.batch_blockchain_data
 
-                input_addresses = self.inputs_analysis(self.inputs, self.new_iteration)
-                change_addresses = self.change_analysis(self.inputs, self.outputs, self.blockchain, self.new_iteration)
+                input_addresses += self.inputs_analysis(self.inputs, self.new_iteration)
+                change_addresses += self.change_analysis(self.inputs, self.outputs, self.blockchain, self.new_iteration)
 
+                if iteration == 0:
+                    new_row = pd.DataFrame({
+                        "Address": [address],
+                        "Number of outgoing txs": [new_addresses_info.outgoing_count],
+                        "Number of incoming txs": [new_addresses_info.incoming_count],
+                        "Address source": ["Starting address"],
+                        "Iteration": [iteration]
+                    })
+                    
+                    
+                else:
+                    new_row = pd.DataFrame({
+                        "Address": [address],
+                        "Number of outgoing txs": [new_addresses_info.outgoing_count],
+                        "Number of incoming txs": [new_addresses_info.incoming_count],
+                        "Address source": ["Heuristic  clustering"],
+                        "Iteration": [iteration]
+                    })
+                    
+                st.session_state.write =pd.concat([st.session_state.write, new_row], ignore_index=True)
+                self.table_placeholder.dataframe(st.session_state.write)
+            iteration += 1
             
 
-        return input_addresses, change_addresses
+
+            self.new_addresses = input_addresses + change_addresses
+            
+            diff_addr = list(set(self.new_addresses) - set(self.old_addresses))
+            if len(diff_addr) == 0:
+                break
+            self.new_iteration = diff_addr
+            
+            # 1. Blockchain Data
+            sql_b = "INSERT IGNORE INTO blockchain_data (txid, num_inputs, num_outputs, fee, mempool_entry_time, block_height) VALUES (%s, %s, %s, %s, %s, %s)"
+            self.execute_batch_insert(sql_b, self.blockchain)
+
+            # 2. Inputs Data
+            sql_i = "INSERT IGNORE INTO tx_inputs (txid, input_order, address, value) VALUES (%s, %s, %s, %s)"
+            self.execute_batch_insert(sql_i, self.inputs)
+
+            # 3. Outputs Data
+            sql_o = "INSERT IGNORE INTO tx_outputs (txid, output_order, address, value) VALUES (%s, %s, %s, %s)"
+            self.execute_batch_insert(sql_o, self.outputs)
+
+            self.inputs = []
+            self.outputs = []
+            self.blockchain = []
+                
+
+            self.new_addresses = diff_addr
+            self.old_addresses += diff_addr
+            input_addresses = []
+            change_addresses = []
+
+
 
         
         
