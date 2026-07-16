@@ -64,7 +64,10 @@ class GetAddressInfo:
                 incoming = False
                 outgoing = False
                 #Blockchain data
-                txid = row["hash"]
+                try:
+                    txid = row["hash"]
+                except:
+                    continue
                 num_inputs = len(row["inputs"])
                 num_outputs = len(row["outputs"])
                 fee = row["fee"]
