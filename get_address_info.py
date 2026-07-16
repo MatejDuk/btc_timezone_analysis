@@ -78,8 +78,12 @@ class GetAddressInfo:
                 #Inputs
                 for i,input in enumerate(row["inputs"]):
                     input_order = i
-                    address = input["coin"]["address"]
-                    value = input["coin"]["value"] / 100000000
+                    try:
+                        address = input["coin"]["address"]
+                        value = input["coin"]["value"] / 100000000
+                    except:
+                        address = "No address"
+                        value = 0
                     self.batch_tx_inputs.append([txid, input_order, address, value])
                     if address == self.address:
                         outgoing = True
