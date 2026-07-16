@@ -37,15 +37,18 @@ class GetAddressInfo:
             try:
                 r = self.session.get(url, timeout=(10, 10), params=params, headers = headers)
                 r = r.json()
-                
+                if r.status_code == 200:
+                    r = r.json()
+                    break # Success!
+                else:
+                    print(f"API Error {r.status_code} for {self.address}: {r.text}")
+                    time.sleep(5) # Wait before retrying
             except Exception as e:
                 print(f"Attempt {j} error on {self.address}: {e}")
-                time.sleep(2) 
-            else:
-                break
+                time.sleep(5) 
         end_time = time.time()
         #print(end_time-start_time)
-        #print(self.address)
+        print(self.address)
         return r
     
     def fetch_and_extract(self):
@@ -64,10 +67,7 @@ class GetAddressInfo:
                 incoming = False
                 outgoing = False
                 #Blockchain data
-                try:
-                    txid = row["hash"]
-                except:
-                    txid = ""
+                txid = row["hash"]
                 num_inputs = len(row["inputs"])
                 num_outputs = len(row["outputs"])
                 fee = row["fee"]
