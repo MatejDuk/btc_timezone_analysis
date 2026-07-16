@@ -44,7 +44,8 @@ class GetAddressInfo:
             else:
                 break
         end_time = time.time()
-        print(end_time-start_time)
+        #print(end_time-start_time)
+        print(self.address)
         return r
     
     def fetch_and_extract(self):
