@@ -57,11 +57,12 @@ class HeuristicClustering:
             j += 1
             try:
                 r = self.session.get(url, timeout=(10, 20), params=params, headers = headers)
+                r.raise_for_response()
                 r = r.json()
                 
             except Exception as e:
                 print(f"Attempt {j} error on {self.address}: {e}")
-                time.sleep(2) 
+                time.sleep(5) 
             else:
                 break
         end_time = time.time()

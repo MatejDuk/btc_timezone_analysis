@@ -36,16 +36,13 @@ class GetAddressInfo:
             j += 1
             try:
                 r = self.session.get(url, timeout=(10, 10), params=params, headers = headers)
+                r.raise_for_response()
                 r = r.json()
-                if r.status_code == 200:
-                    r = r.json()
-                    break # Success!
-                else:
-                    print(f"API Error {r.status_code} for {self.address}: {r.text}")
-                    time.sleep(5) # Wait before retrying
             except Exception as e:
                 print(f"Attempt {j} error on {self.address}: {e}")
                 time.sleep(5) 
+            else:
+                break
         end_time = time.time()
         #print(end_time-start_time)
         print(self.address)

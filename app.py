@@ -140,7 +140,7 @@ if st.session_state.model_row is None:
 if st.button("Calculate Probabilities", disabled=st.session_state.model_row is None):
     with st.spinner("Running machine learning model..."):
         # Predict class confidence probabilities
-        probs = model.predict_proba([st.session_state.model_row])[0]
+        probs = model.predict_proba([st.session_state.model_row.iloc[0].tolist()])[0]
         
         # Resolve class names via label encoder or raw indexes
         if encoder:
