@@ -7,13 +7,13 @@ import concurrent.futures
 import time
 
 class HeuristicClustering:
-    def __init__(self, start_address, connection, cursor, session, table_placeholder):
+    def __init__(self, start_address, session):
         self.start_address = start_address
-        self.connection = connection
-        self.cursor = cursor
+        #self.connection = connection
+        #self.cursor = cursor
         self.session = session
         self.api_key = os.getenv("API_KEY")
-        self.table_placeholder = table_placeholder
+        #self.table_placeholder = table_placeholder
 
         self.new_iteration = []
 
@@ -24,6 +24,10 @@ class HeuristicClustering:
         self.inputs = []
         self.outputs = []
         self.blockchain = []
+
+        self.inputs_final = pd.DataFrame(columns=["txid", "input_order", "address", "value"])
+        self.outputs_final = pd.DataFrame(columns = ["txid", "output_order", "address", "value"])
+        self.blockchain_final = pd.DataFrame(columns = ["txid", "num_inputs", "num_outputs", "fee", "mempool_entry_time", "block_height"])
 
         self.write = pd.DataFrame(columns = ["Address", "Number of outgoing txs", "Number of incoming txs", "Address source", "Iteration"])
 
@@ -173,8 +177,8 @@ class HeuristicClustering:
                         "Iteration": [iteration]
                     })
                     
-                st.session_state.write =pd.concat([st.session_state.write, new_row], ignore_index=True)
-                self.table_placeholder.dataframe(st.session_state.write)
+                #st.session_state.write =pd.concat([st.session_state.write, new_row], ignore_index=True)
+                #self.table_placeholder.dataframe(st.session_state.write)
             iteration += 1
             
 
@@ -187,16 +191,16 @@ class HeuristicClustering:
             self.new_iteration = diff_addr
             
             # 1. Blockchain Data
-            sql_b = "INSERT IGNORE INTO blockchain_data (txid, num_inputs, num_outputs, fee, mempool_entry_time, block_height) VALUES (%s, %s, %s, %s, %s, %s)"
-            self.execute_batch_insert(sql_b, self.blockchain)
+            new_df = pd.DataFrame(self.blockchain, columns = self.blockchain_final.columns)
+            self.blockchain_final = pd.concat([self.blockchain_final, new_df], ignore_index = True)
 
             # 2. Inputs Data
-            sql_i = "INSERT IGNORE INTO tx_inputs (txid, input_order, address, value) VALUES (%s, %s, %s, %s)"
-            self.execute_batch_insert(sql_i, self.inputs)
+            new_df = pd.DataFrame(self.inputs, columns = self.inputs_final.columns)
+            self.inputs_final = pd.concat([self.inputs_final, new_df], ignore_index = True)
 
             # 3. Outputs Data
-            sql_o = "INSERT IGNORE INTO tx_outputs (txid, output_order, address, value) VALUES (%s, %s, %s, %s)"
-            self.execute_batch_insert(sql_o, self.outputs)
+            new_df = pd.DataFrame(self.outputs, columns = self.outputs_final.columns)
+            self.outputs_final = pd.concat([self.outputs_final, new_df], ignore_index = True)
 
             self.inputs = []
             self.outputs = []

@@ -3,21 +3,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 class Histogram:
-    def __init__(self, connection, cursor):
-        self.connection = connection
-        self.cursor = cursor
+    def __init__(self, addresses, inputs, outputs, blockchain):
+        self.addresses = addresses
+        self.inputs = inputs
+        self.outputs = outputs
+        self.blockchain = blockchain
 
     def create_histogram(self, addresses):
-        #Getting all outgoing transaction to addresses from list
-        placeholders = ','.join(['%s'] * len(addresses))
-        query = f"""SELECT DISTINCT ti.txid, ti.input_order, ti.address, bd.mempool_entry_time, bd.fee, bd.num_inputs, bd.num_outputs, ti.value FROM tx_inputs AS ti
-        LEFT JOIN blockchain_data AS bd on ti.txid = bd.txid
-        WHERE address in ({placeholders});"""
-
-        self.cursor.execute(query, addresses)
-        database = self.cursor.fetchall()
-        database = pd.DataFrame(database, columns = ["txid", "input_order", "address", "mempool_entry_time", "fee", "num_inputs", "num_outputs", "value"])
-
+        txs = self.inputs[self.inputs["address"].isin(self.addresses)]["txid"].unique().tolist()
+        database = self.blockchain[self.blockchain["txid"].isin(txs)]
+        
         db_final = database.drop_duplicates(subset = ["txid"])
         db_final["hour"] = pd.to_datetime(db_final["mempool_entry_time"]).dt.hour
         hour_counts = db_final.groupby("hour").size()
