@@ -85,7 +85,9 @@ Automated filtering of institutional or exchange wallets is beyond the scope of 
 
 *Want to test it out? Try one of these pre-verified addresses:*
 * 18LHS5Guof1GHQgcXHQkHpKm4VV45Utnki
-* 
+* 1N9vbvE2Yge7W2RVfDfvRuDVJXGQjPxz4D
+* 1EmcSm2yyREEgkheJ2YUSyhaxkKno47NnK
+* 15Yhg5Mj7tkheFi4yybpNFC3U4z6sQwRVb
 """)
 table_placeholder = st.empty()
 if "write" in st.session_state and st.session_state.write is not None:
