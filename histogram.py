@@ -32,8 +32,11 @@ class Histogram:
         # Create a DataFrame for your model/display
         model_df = pd.DataFrame([normalized_vector.values], columns=range(24))
         fig, ax = plt.subplots(figsize=(10, 5))
+        times = db_final["mempool_entry_time"].tolist()
+
+        hours = pd.to_datetime(db_final["mempool_entry_time"]).dt.hour
         
-        ax.hist(db_final["mempool_entry_time"].dt.hour, bins=np.arange(25), 
+        ax.hist(hours, bins=np.arange(25), 
                 rwidth=0.8, color='skyblue', edgecolor='black')
 
         ax.set_xticks(np.arange(24) + 0.5)

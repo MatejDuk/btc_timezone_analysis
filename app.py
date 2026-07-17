@@ -14,6 +14,15 @@ from histogram import Histogram
 if "addresses" not in st.session_state:
     st.session_state.addresses = []
 
+if "inputs" not in st.session_state:
+    st.session_state.inputs = None
+
+if "outputs" not in st.session_state:
+    st.session_state.outputs = None
+
+if "blockchain" not in st.session_state:
+    st.session_state.blockchain = None
+
 if "write" not in st.session_state:
     st.session_state.write = None
 
@@ -31,17 +40,6 @@ if "transactions_count" not in st.session_state:
 
 # Cache session for saving API requests (expires after 30 days)
 session = requests_cache.CachedSession('api_cache', expire_after=datetime.timedelta(days=30))
-
-# Connect to TiDB database
-connection = pymysql.connect(
-    host="gateway01.eu-central-1.prod.aws.tidbcloud.com",
-    port=4000,
-    user=os.getenv("USER_DATABASE"),
-    password=os.getenv("PASSWORD_DATABASE"),
-    database="test", 
-    ssl={'ssl_verify_cert': False}
-)
-cursor = connection.cursor()
 
 # Set up page configurations
 st.set_page_config(
@@ -89,12 +87,14 @@ if st.button("Start data collection and scraping"):
             table_placeholder.dataframe(st.session_state.first_address)
             st.session_state.write = None
 
-            heur = HeuristicClustering(btc_address, connection,cursor, session,table_placeholder)
+            heur = HeuristicClustering(btc_address, session, table_placeholder)
 
             heur.heuristic_clus()
 
             st.session_state.addresses = heur.old_addresses
-
+            st.session_state.inputs = heur.inputs_final
+            st.session_state.outputs = heur.outputs_final
+            st.session_state.blockchain = heur.blockchain_final
             
             st.success("✅ Clustering successfully finished! All connected wallets have been scraped.")
 
@@ -110,7 +110,7 @@ if st.button("Generate Transaction Histogram"):
     if st.session_state.addresses:
         with st.status("Analyzing transactions...", expanded=True) as status:
             st.write("Initializing Histogram class...")
-            hist_gen = Histogram(connection, cursor)
+            hist_gen = Histogram(st.session_state.addresses, st.session_state.inputs, st.session_state.outputs, st.session_state.blockchain)
             
             st.write("Calculating transaction distribution...")
             fig, table, trans = hist_gen.create_histogram(st.session_state.addresses)

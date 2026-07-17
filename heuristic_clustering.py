@@ -7,13 +7,13 @@ import concurrent.futures
 import time
 
 class HeuristicClustering:
-    def __init__(self, start_address, session):
+    def __init__(self, start_address, session, table_placeholder):
         self.start_address = start_address
         #self.connection = connection
         #self.cursor = cursor
         self.session = session
         self.api_key = os.getenv("API_KEY")
-        #self.table_placeholder = table_placeholder
+        self.table_placeholder = table_placeholder
 
         self.new_iteration = []
 
@@ -177,8 +177,8 @@ class HeuristicClustering:
                         "Iteration": [iteration]
                     })
                     
-                #st.session_state.write =pd.concat([st.session_state.write, new_row], ignore_index=True)
-                #self.table_placeholder.dataframe(st.session_state.write)
+                st.session_state.write =pd.concat([st.session_state.write, new_row], ignore_index=True)
+                self.table_placeholder.dataframe(st.session_state.write)
             iteration += 1
             
 
