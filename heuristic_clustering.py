@@ -185,10 +185,6 @@ class HeuristicClustering:
 
             self.new_addresses = input_addresses + change_addresses
             
-            diff_addr = list(set(self.new_addresses) - set(self.old_addresses))
-            if len(diff_addr) == 0:
-                break
-            self.new_iteration = diff_addr
             
             # 1. Blockchain Data
             new_df = pd.DataFrame(self.blockchain, columns = self.blockchain_final.columns)
@@ -205,6 +201,11 @@ class HeuristicClustering:
             self.inputs = []
             self.outputs = []
             self.blockchain = []
+
+            diff_addr = list(set(self.new_addresses) - set(self.old_addresses))
+            if len(diff_addr) == 0:
+                break
+            self.new_iteration = diff_addr
                 
 
             self.new_addresses = diff_addr
