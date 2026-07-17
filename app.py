@@ -84,8 +84,8 @@ st.info("""
 Automated filtering of institutional or exchange wallets is beyond the scope of this project, so please verify the address entity manually using tools like [Arkham Intelligence](https://arkm.com/). 
 
 *Want to test it out? Try one of these pre-verified addresses:*
-* sasas
-* sas
+* 18LHS5Guof1GHQgcXHQkHpKm4VV45Utnki
+* 
 """)
 table_placeholder = st.empty()
 if "write" in st.session_state and st.session_state.write is not None:
