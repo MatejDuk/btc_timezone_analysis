@@ -64,12 +64,29 @@ model, encoder = load_model()
 # Header layout
 st.title("🌍 Bitcoin Time Zone Predictor")
 st.markdown("""
-This application utilizes a pre-trained machine learning model to infer the primary 
-operating time zone of a Bitcoin address based on its transactional behavioral features.
+Welcome to the **Bitcoin Time Zone Predictor**. Developed as part of my Master's thesis, this application utilizes a machine learning model to classify a Bitcoin entity's geographic region—**Euro-Africa, Americas, East Asia & Pacific or Central Asia**—based entirely on its transaction history. 
+
+The analysis pipeline is divided into three stages:
+
+* **1. Data Collection & Clustering:** Input a valid Bitcoin address to initiate data extraction. The application automatically applies heuristic clustering to map the complete wallet architecture associated with the address. *(Note: This network analysis is computationally intensive; please allow time for the process to complete).*
+* **2. Visualization & Vector Preparation:** Generates a chronological histogram of the combined transaction activity across all clustered addresses. This step also compiles the final input data row required for the model, which is made available for download.
+* **3. Model Prediction:** Leverages a pre-trained XGBoost classification model to calculate the probability distribution across the four global regions.
+
+---
+*Disclaimer: Be aware that this is only hobby project and relies on free-tier APIs, which may occasionally result in rate limits or timeouts. If you encounter any bugs or wish to explore the underlying architecture, the complete repository is available on my GitHub. For direct inquiries, feel free to contact me at [matej.dukat@gmail.com](mailto:matej.dukat@gmail.com).*
 """)
 st.write("---")
 
 st.title("1. Data collection")
+st.info("""
+**Address Requirements:** Please input a Bitcoin address known to belong to an **individual user**. 
+
+Automated filtering of institutional or exchange wallets is beyond the scope of this project, so please verify the address entity manually using tools like [Arkham Intelligence](https://arkm.com/). 
+
+*Want to test it out? Try one of these pre-verified addresses:*
+* sasas
+* sas
+""")
 table_placeholder = st.empty()
 if "write" in st.session_state and st.session_state.write is not None:
     table_placeholder.dataframe(st.session_state.write)
