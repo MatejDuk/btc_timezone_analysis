@@ -128,7 +128,7 @@ if st.button("Generate Transaction Histogram"):
 if st.session_state.fig:
     st.pyplot(st.session_state.fig)
     st.dataframe(st.session_state.model_row)
-    st.write(f"Model Input Vector Prepared ({st.session_state.transactions_count}). You can download the data")
+    st.write(f"Model Input Vector Prepared ({st.session_state.transactions_count} transactions). You can download the data")
 
 st.write("---")
 st.title("3. Model Prediction")
