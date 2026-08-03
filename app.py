@@ -39,7 +39,11 @@ if "transactions_count" not in st.session_state:
     st.session_state.transactions_count = 0
 
 # Cache session for saving API requests (expires after 30 days)
-session = requests_cache.CachedSession('api_cache', expire_after=datetime.timedelta(days=30))
+@st.cache_resource
+def get_cached_session():
+    return requests_cache.CachedSession('api_cache', expire_after=datetime.timedelta(days=30))
+
+session = get_cached_session()
 
 # Set up page configurations
 st.set_page_config(
@@ -99,6 +103,7 @@ btc_address = st.text_input(
 
 if st.button("Start data collection and scraping"):   
     if btc_address:
+        start_time = datetime.datetime.now()
         with st.spinner("Scraping starting address and connected transaction history..."):
             st.session_state.first_address = pd.DataFrame( 
                 columns=["Address", "Number of outgoing txs", "Number of incoming txs", "Address source", "Iteration"]
@@ -116,7 +121,8 @@ if st.button("Start data collection and scraping"):
             st.session_state.blockchain = heur.blockchain_final
             
             st.success("✅ Clustering successfully finished! All connected wallets have been scraped.")
-
+            end_time = datetime.datetime.now()
+            st.write(f"⏱️ Total time taken: {end_time - start_time}")
     else:
         st.warning("Please provide a Bitcoin address first.")
 
