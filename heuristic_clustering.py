@@ -26,9 +26,9 @@ class HeuristicClustering:
         self.outputs = []
         self.blockchain = []
 
-        self.inputs_final = pd.DataFrame(columns=["txid", "input_order", "address", "value"])
-        self.outputs_final = pd.DataFrame(columns = ["txid", "output_order", "address", "value"])
-        self.blockchain_final = pd.DataFrame(columns = ["txid", "num_inputs", "num_outputs", "fee", "mempool_entry_time", "block_height"])
+        self.inputs_final_data = []
+        self.outputs_final_data = []
+        self.blockchain_final_data = []
 
         self.write = pd.DataFrame(columns = ["Address", "Number of outgoing txs", "Number of incoming txs", "Address source", "Iteration"])
 
@@ -195,23 +195,12 @@ class HeuristicClustering:
                 st.session_state.write =pd.concat([st.session_state.write, new_row], ignore_index=True)
                 self.table_placeholder.dataframe(st.session_state.write)
             iteration += 1
-            
-
 
             self.new_addresses = input_addresses + change_addresses
             
-            
-            # 1. Blockchain Data
-            new_df = pd.DataFrame(self.blockchain, columns = self.blockchain_final.columns)
-            self.blockchain_final = pd.concat([self.blockchain_final, new_df], ignore_index = True)
-
-            # 2. Inputs Data
-            new_df = pd.DataFrame(self.inputs, columns = self.inputs_final.columns)
-            self.inputs_final = pd.concat([self.inputs_final, new_df], ignore_index = True)
-
-            # 3. Outputs Data
-            new_df = pd.DataFrame(self.outputs, columns = self.outputs_final.columns)
-            self.outputs_final = pd.concat([self.outputs_final, new_df], ignore_index = True)
+            self.blockchain_final_data.extend(self.blockchain)
+            self.inputs_final_data.extend(self.inputs)
+            self.outputs_final_data.extend(self.outputs)
 
             self.inputs = []
             self.outputs = []
@@ -227,6 +216,21 @@ class HeuristicClustering:
             self.old_addresses += diff_addr
             input_addresses = []
             change_addresses = []
+        
+        self.blockchain_final = pd.DataFrame(
+            self.blockchain_final_data, 
+            columns=["txid", "num_inputs", "num_outputs", "fee", "mempool_entry_time", "block_height"]
+        )
+        
+        self.inputs_final = pd.DataFrame(
+            self.inputs_final_data, 
+            columns=["txid", "input_order", "address", "value"]
+        )
+        
+        self.outputs_final = pd.DataFrame(
+            self.outputs_final_data, 
+            columns=["txid", "output_order", "address", "value"]
+        )
 
 
 
