@@ -1,26 +1,25 @@
+from multiprocessing.dummy import connection
 import streamlit as st
 import pickle
 import pandas as pd
 import numpy as np
+import pymysql
 import os
 import requests_cache
 import datetime
+import matplotlib.pyplot as plt
 from get_address_info import GetAddressInfo
 from heuristic_clustering import HeuristicClustering
-from histogram import Histogram
 
 # Initialize session states
+if "address" not in st.session_state:
+    st.session_state.address = None
+
 if "addresses" not in st.session_state:
     st.session_state.addresses = []
 
-if "inputs" not in st.session_state:
-    st.session_state.inputs = None
-
-if "outputs" not in st.session_state:
-    st.session_state.outputs = None
-
-if "blockchain" not in st.session_state:
-    st.session_state.blockchain = None
+if "total_transactions" not in st.session_state:
+    st.session_state.total_transactions = 0
 
 if "write" not in st.session_state:
     st.session_state.write = None
@@ -33,9 +32,26 @@ if "fig" not in st.session_state:
 
 if "model_row" not in st.session_state: 
     st.session_state.model_row = None
+    
+  
 
-if "transactions_count" not in st.session_state:
-    st.session_state.transactions_count = 0
+#Connection to DB
+@st.cache_resource
+def get_db_connection():
+    connection = pymysql.connect(
+        host = "gateway01.eu-central-1.prod.aws.tidbcloud.com",
+        port = 4000,
+        user = os.getenv("USER_DATABASE"),
+        password = os.getenv("PASSWORD_DATABASE"),
+        database = "test", 
+        ssl_verify_cert = True,
+        ssl_verify_identity = True
+    )
+
+    cursor = connection.cursor()
+    return connection
+
+connection = get_db_connection()
 
 # Cache session for saving API requests (expires after 30 days)
 @st.cache_resource
@@ -64,6 +80,31 @@ def load_model():
 
 model, encoder = load_model()
 
+@st.cache_data
+def create_histogram(model_row):
+    values = model_row.iloc[0].tolist()
+    hours = list(range(24))
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.bar(hours, values, width=1.0, align='edge', color='skyblue', edgecolor='black')
+    ax.set_title("Bitcoin Transaction Activity", size=16)
+    ax.set_xlabel("Hour of the Day", size=14)
+    ax.set_ylabel("Number of transactions", size=14)
+    ax.set_xticks(np.arange(24) + 0.5)
+    ax.set_xticklabels(range(24))
+    return fig
+
+def reset_state():
+    st.session_state.write = None
+    st.session_state.btc_address_input = ""
+    st.session_state.addresses = []
+    st.session_state.total_transactions = 0
+    st.session_state.row = None
+    st.session_state.fig = None
+    st.session_state.model_row = None
+
+def reset_write_state():
+    st.session_state.write = None
+
 # Header layout
 st.title("🌍 Bitcoin Time Zone Predictor")
 st.markdown("""
@@ -81,27 +122,93 @@ The analysis pipeline is divided into three stages:
 st.write("---")
 
 st.title("1. Data collection")
-st.info("""
-**Address Requirements:** Please input a Bitcoin address known to belong to an **individual user**. 
-
-Automated filtering of institutional or exchange wallets is beyond the scope of this project, so please verify the address entity manually using tools like [Arkham Intelligence](https://arkm.com/). 
-
-*Want to test it out? Try one of these pre-verified addresses:*
-* 18LHS5Guof1GHQgcXHQkHpKm4VV45Utnki
-* 1N9vbvE2Yge7W2RVfDfvRuDVJXGQjPxz4D
-* 1EmcSm2yyREEgkheJ2YUSyhaxkKno47NnK
-* 15Yhg5Mj7tkheFi4yybpNFC3U4z6sQwRVb
-""")
-table_placeholder = st.empty()
-if "write" in st.session_state and st.session_state.write is not None:
-    table_placeholder.dataframe(st.session_state.write)
-
-btc_address = st.text_input(
-    label="Enter existing btc address"
+type_of_data_collection = st.selectbox(
+    label="Select data collection method",
+    options=["Heuristic clustering", "Data extraction from saved addresses"],
+    on_change=reset_state
 )
+if type_of_data_collection == "Heuristic clustering":
+    st.info("""
+    **Address Requirements:** Please input a Bitcoin address known to belong to an **individual user**. 
 
-if st.button("Start data collection and scraping"):   
-    if btc_address:
+    Automated filtering of institutional or exchange wallets is beyond the scope of this project, so please verify the address entity manually using tools like [Arkham Intelligence](https://arkm.com/). 
+
+    *Want to test it out? Try one of these pre-verified addresses:*
+    * 18LHS5Guof1GHQgcXHQkHpKm4VV45Utnki
+    * 1N9vbvE2Yge7W2RVfDfvRuDVJXGQjPxz4D
+    * 1EmcSm2yyREEgkheJ2YUSyhaxkKno47NnK
+    * 15Yhg5Mj7tkheFi4yybpNFC3U4z6sQwRVb
+    """)
+    btc_address = st.text_input(
+        label="Enter existing btc address",
+        persist_state = "session",
+        key = "btc_address_input",
+        on_change=reset_write_state
+    )
+    heur_btn = st.button("Start Heuristic Clustering")
+    table_placeholder = st.empty()
+    if "write" in st.session_state and st.session_state.write is not None:
+        table_placeholder.dataframe(st.session_state.write)
+
+    
+
+    if heur_btn:   
+        if btc_address:
+            start_time = datetime.datetime.now()
+            with st.spinner("Scraping starting address and connected transaction history..."):
+                st.session_state.first_address = pd.DataFrame( 
+                    columns=["Address", "Number of outgoing txs", "Number of incoming txs", "Address source", "Iteration"]
+                )
+                table_placeholder.dataframe(st.session_state.first_address)
+                st.session_state.write = None
+
+                heur = HeuristicClustering(btc_address, session, table_placeholder)
+
+                heur.heuristic_clus()
+
+                heur.get_final_data()
+                st.session_state.model_row = heur.model_df
+                st.session_state.row = heur.hour_counts
+                st.session_state.total_transactions = heur.total_transactions
+
+                st.session_state.addresses = heur.old_addresses
+
+                end_time = datetime.datetime.now()
+                st.write(f"⏱️ Total time taken: {end_time - start_time}")
+                st.success("✅ Clustering successfully finished! All connected wallets have been scraped.")
+                st.session_state.address = btc_address
+                #st.write(st.session_state.model_row)
+                
+        else:
+            st.warning("Please provide a Bitcoin address first.")
+
+elif type_of_data_collection == "Data extraction from saved addresses":
+    connection.ping(reconnect=True)
+    st.info("This feature is under development. Please check back later.")
+    sql = "SELECT * FROM saved_data"
+    with connection.cursor() as cursor:
+        cursor.execute(sql)
+        data = cursor.fetchall()
+    data = pd.DataFrame(data, columns=["Address", "Save Date", "Number of Transactions"] + [f"Feature {i}" for i in range(24)])
+    data_write = data[["Address", "Save Date", "Number of Transactions"]]
+    event = st.dataframe(data_write, selection_mode = "single-row-required", on_select = "rerun")
+    col1, col2 = st.columns(2)
+    btn1 = col1.button("Use Address for prediction")
+    if btn1:
+        row = data.loc[data.index == event.selection["rows"][0]].iloc[0,3:]
+        st.session_state.total_transactions = data.loc[data.index == event.selection["rows"][0]].iloc[0,2]
+        st.session_state.row = pd.DataFrame([row.values], columns=range(24))
+        alpha = 1
+        st.session_state.model_row = (st.session_state.row + alpha) / (st.session_state.total_transactions + 24 * alpha)
+        st.success("✅ Address selected for prediction. You can now proceed to Data Visualisation and Model Prediction.")
+    btn2 = col2.button("Update Address for prediction") 
+    if btn2:
+        st.info("Wait for the heuristic clustering to finish.")
+        row = data.loc[data.index == event.selection["rows"][0]].iloc[0,3:]
+        btc_address = data.loc[data.index == event.selection["rows"][0]].iloc[0,0]
+        table_placeholder = st.empty()
+        if "write" in st.session_state and st.session_state.write is not None:
+            table_placeholder.dataframe(st.session_state.write)
         start_time = datetime.datetime.now()
         with st.spinner("Scraping starting address and connected transaction history..."):
             st.session_state.first_address = pd.DataFrame( 
@@ -114,45 +221,79 @@ if st.button("Start data collection and scraping"):
 
             heur.heuristic_clus()
 
+            heur.get_final_data()
+            st.session_state.model_row = heur.model_df
+            st.session_state.row = heur.hour_counts
+            st.session_state.total_transactions = heur.total_transactions
+
             st.session_state.addresses = heur.old_addresses
-            st.session_state.inputs = heur.inputs_final
-            st.session_state.outputs = heur.outputs_final
-            st.session_state.blockchain = heur.blockchain_final
-            
-            st.success("✅ Clustering successfully finished! All connected wallets have been scraped.")
+
             end_time = datetime.datetime.now()
             st.write(f"⏱️ Total time taken: {end_time - start_time}")
-    else:
-        st.warning("Please provide a Bitcoin address first.")
-
+            st.session_state.address = btc_address
+            connection.ping(reconnect=True)
+            data_to_save = [st.session_state.address, datetime.datetime.now(), st.session_state.total_transactions] + st.session_state.row.iloc[0].tolist()
+            #st.write(data_to_save)
+            sql = '''
+                INSERT INTO saved_data 
+                    (address, save_date, num_of_txs, `0`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `10`, `11`, `12`, `13`, `14`, `15`, `16`, `17`, `18`, `19`, `20`, `21`, `22`, `23`) 
+                VALUES 
+                    (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    save_date = VALUES(save_date),
+                    num_of_txs = VALUES(num_of_txs),
+                    `0` = VALUES(`0`), `1` = VALUES(`1`), `2` = VALUES(`2`), 
+                    `3` = VALUES(`3`), `4` = VALUES(`4`), `5` = VALUES(`5`), 
+                    `6` = VALUES(`6`), `7` = VALUES(`7`), `8` = VALUES(`8`), 
+                    `9` = VALUES(`9`), `10` = VALUES(`10`), `11` = VALUES(`11`), 
+                    `12` = VALUES(`12`), `13` = VALUES(`13`), `14` = VALUES(`14`), 
+                    `15` = VALUES(`15`), `16` = VALUES(`16`), `17` = VALUES(`17`), 
+                    `18` = VALUES(`18`), `19` = VALUES(`19`), `20` = VALUES(`20`), 
+                    `21` = VALUES(`21`), `22` = VALUES(`22`), `23` = VALUES(`23`)
+            '''
+            with connection.cursor() as cursor:
+                cursor.execute(sql, data_to_save)
+            connection.commit()
+            st.success("✅ Heuristing clustering finished and data in the database updated!")
+            #st.write(st.session_state.model_row)
 
 
 st.write("---")
 st.title("2. Data Visualisation")
 
 if st.button("Generate Transaction Histogram"):
-    if st.session_state.addresses:
-        with st.status("Analyzing transactions...", expanded=True) as status:
-            st.write("Initializing Histogram class...")
-            hist_gen = Histogram(st.session_state.addresses, st.session_state.inputs, st.session_state.outputs, st.session_state.blockchain)
-            
-            st.write("Calculating transaction distribution...")
-            fig, table, trans = hist_gen.create_histogram(st.session_state.addresses)
-            
-            # Save to session state so they persist across reruns
-            st.session_state.fig = fig
-            st.session_state.model_row = table
-            st.session_state.transactions_count = trans
-            
-            status.update(label="✅ Analysis complete!", state="complete", expanded=False)
+    if st.session_state.model_row is not None:
+        fig = create_histogram(st.session_state.row)
+        
+        # Save to session state so they persist across reruns
+        st.session_state.fig = fig
+        
+        
+        st.success("✅ Analysis complete!")
     else:
-        st.warning("No addresses found. Run Data Collection first!")
-
+        st.warning("No data found. Run Data Collection first!")
+        
 # Always display the histogram if it exists in state
 if st.session_state.fig:
     st.pyplot(st.session_state.fig)
     st.dataframe(st.session_state.model_row)
-    st.write(f"Model Input Vector Prepared ({st.session_state.transactions_count} transactions). You can download the data")
+    st.write(f"Model Input Vector Prepared ({st.session_state.total_transactions} transactions). You can save this into database or download it for future use.")
+    if type_of_data_collection == "Heuristic clustering":
+        save_btn = st.button("Save to Database")
+        if save_btn:
+            connection.ping(reconnect=True)
+            data_to_save = [st.session_state.address, datetime.datetime.now(), st.session_state.total_transactions] + st.session_state.row.iloc[0].tolist()
+            #st.write(data_to_save)
+            sql = '''
+                INSERT IGNORE INTO saved_data 
+                (address, save_date, num_of_txs, `0`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `10`, `11`, `12`, `13`, `14`, `15`, `16`, `17`, `18`, `19`, `20`, `21`, `22`, `23`) 
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            '''
+            with connection.cursor() as cursor:
+                cursor.execute(sql, data_to_save)
+            connection.commit()
+            st.success("✅ Data saved to database successfully!")
+
 
 st.write("---")
 st.title("3. Model Prediction")

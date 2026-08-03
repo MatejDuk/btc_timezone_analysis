@@ -15,6 +15,10 @@ class HeuristicClustering:
         self.session = session
         self.api_key = os.getenv("API_KEY")
         self.table_placeholder = table_placeholder
+        self.model_df = pd.DataFrame(columns=range(24))
+        self.db_final = None
+        self.total_transactions = None
+        self.hour_counts = None
 
         self.new_iteration = []
 
@@ -231,6 +235,30 @@ class HeuristicClustering:
             self.outputs_final_data, 
             columns=["txid", "output_order", "address", "value"]
         )
+
+    def get_final_data(self):
+        txs = self.inputs_final[self.inputs_final["address"].isin(self.old_addresses)]["txid"].unique().tolist()
+        database = self.blockchain_final[self.blockchain_final["txid"].isin(txs)]
+        
+        self.db_final = database.drop_duplicates(subset = ["txid"])
+        self.db_final["hour"] = pd.to_datetime(self.db_final["mempool_entry_time"]).dt.hour
+        self.hour_counts = self.db_final.groupby("hour").size()
+        
+        # 2. Reindex to ensure ALL 0-23 hours exist, filling missing with 0
+        all_hours = pd.Series(0, index=range(24))
+        self.hour_counts = self.hour_counts.add(all_hours, fill_value=0)
+        
+        # 3. Create the vector (this is what your model needs)
+        self.total_transactions = self.hour_counts.sum()
+        
+        # 4. Bayesian Normalization
+        # alpha = 1 ensures no column is ever 0 (helps with log-based models)
+        alpha = 1
+        normalized_vector = (self.hour_counts + alpha) / (self.total_transactions + 24 * alpha)
+        
+        # Create a DataFrame for your model/display
+        self.model_df = pd.DataFrame([normalized_vector.values], columns=range(24))
+        self.hour_counts = pd.DataFrame([self.hour_counts.values], columns=range(24))
 
 
 
