@@ -114,8 +114,8 @@ class HeuristicClustering:
                 r1 = self.html_request(address1, offset=0, in_out="incoming")
                 r2 = self.html_request(address2, offset=0, in_out="incoming")
                 
-                val1 = output_data[(output_data["txid"] == txid) & (output_data["output_order"] == 0)]["value"]
-                val2 = output_data[(output_data["txid"] == txid) & (output_data["output_order"] == 1)]["value"]
+                val1 = output_data[(output_data["txid"] == txid) & (output_data["output_order"] == 0)]["value"].iloc[0]
+                val2 = output_data[(output_data["txid"] == txid) & (output_data["output_order"] == 1)]["value"].iloc[0]
 
                 if len(r1) == 1 and self.decim(val1)-self.decim(val2) >= 3:
                     change_addresses.append(address1)
@@ -168,6 +168,7 @@ class HeuristicClustering:
 
         while True:
             for address in self.new_iteration:
+                #Obtaining all transaction information about specific address, such as inputs and outputs
                 new_addresses_info = GetAddressInfo(address, self.session)
                 new_addresses_info.fetch_and_extract()
                 self.inputs += new_addresses_info.batch_tx_inputs
