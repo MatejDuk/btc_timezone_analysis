@@ -124,23 +124,16 @@ class HeuristicClustering:
             elif len(output_addresses) > 2:
                 count = 0
                 cha = None
-                with ThreadPoolExecutor(max_workers=10) as executor:
-                        # Submit all HTML requests to the thread pool simultaneously
-                        future_to_address = {
-                            executor.submit(self.html_request, address, 0, "incoming"): address 
-                            for address in output_addresses
-                        }
+                
+                for address in output_addresses:
+                    try:
+                        r = self.html_request(address, offset=0, in_out="incoming")
                         
-                        # Process the results as soon as each thread finishes
-                        for future in as_completed(future_to_address):
-                            address = future_to_address[future]
-                            try:
-                                r = future.result()
-                                if len(r) == 1:
-                                    cha = address
-                                    count += 1
-                            except Exception as e:
-                                print(f"Error analyzing address {address}: {e}")
+                        if len(r) == 1:
+                            cha = address
+                            count += 1
+                    except Exception as e:
+                        print(f"Error analyzing address {address}: {e}")
 
                 if count == 1 and cha is not None:
                     change_addresses.append(cha)

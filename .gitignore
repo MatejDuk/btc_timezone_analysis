@@ -219,3 +219,7 @@ __marimo__/
 
 # Api cache
 api_cache.sqlite
+
+#.vscode
+
+.vscode
