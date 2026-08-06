@@ -61,22 +61,18 @@ class HeuristicClustering:
 
         test = True
         j = 0
-        start_time = time.time()
+        #start_time = time.time()
         while test:
             j += 1
-            try:
-                r = self.session.get(url, timeout=(10, 20), params=params, headers = headers)
-                code = r.status_code
-                r = r.json()
-                if code == 200:
-                    break
-                
-            except Exception as e:
-                print(f"Attempt {j} error on {self.address}: {e}")
-                time.sleep(5) 
-            else:
+            r = self.session.get(url, timeout=(100, 100), params=params, headers = headers)
+            code = r.status_code
+            r = r.json()
+            if code == 200:
                 break
-        end_time = time.time()
+            print(f"Attempt {j} error on {self.address}: {e}")
+            time.sleep(5) 
+            
+        #end_time = time.time()
         #print(end_time-start_time)
         #print(address)
         return r
