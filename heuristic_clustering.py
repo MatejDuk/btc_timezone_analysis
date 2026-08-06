@@ -69,7 +69,7 @@ class HeuristicClustering:
             r = r.json()
             if code == 200:
                 break
-            print(f"Attempt {j} error on {self.address}: {e}")
+            print(f"Attempt {j} error on {self.address}")
             time.sleep(5) 
             
         #end_time = time.time()
