@@ -69,7 +69,7 @@ class HeuristicClustering:
             r = r.json()
             if code == 200:
                 break
-            print(f"Attempt {j} error on {self.address}")
+            print(f"Attempt {j} error on {address}")
             time.sleep(5) 
             
         #end_time = time.time()
@@ -122,14 +122,11 @@ class HeuristicClustering:
                 cha = None
                 
                 for address in output_addresses:
-                    try:
-                        r = self.html_request(address, offset=0, in_out="incoming")
-                        
-                        if len(r) == 1:
-                            cha = address
-                            count += 1
-                    except Exception as e:
-                        print(f"Error analyzing address {address}: {e}")
+                    r = self.html_request(address, offset=0, in_out="incoming")
+                    
+                    if len(r) == 1:
+                        cha = address
+                        count += 1
 
                 if count == 1 and cha is not None:
                     change_addresses.append(cha)
