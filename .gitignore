@@ -223,3 +223,5 @@ api_cache.sqlite
 #.vscode
 
 .vscode
+
+data_collection/Webshare 100 proxies.txt

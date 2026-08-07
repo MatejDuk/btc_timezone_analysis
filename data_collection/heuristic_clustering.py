@@ -1,0 +1,209 @@
+from get_address_info import GetAddressInfo
+import os
+import pymysql
+import pandas as pd
+import concurrent.futures
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import datetime 
+
+class HeuristicClustering:
+    def __init__(self, start_address, session, a, proxies_dict_list):
+        self.a = a
+        self.proxies_dict_list = proxies_dict_list
+        self.start_address = start_address
+        self.session = session
+        self.model_df = pd.DataFrame(columns=range(24))
+        self.db_final = None
+        self.total_transactions = None
+        self.hour_counts = None
+
+        self.new_iteration = []
+
+        self.new_addresses = []
+        self.old_addresses = []
+
+        self.addresses = []
+        self.inputs = []
+        self.outputs = []
+        self.blockchain = []
+
+        self.inputs_final_data = []
+        self.outputs_final_data = []
+        self.blockchain_final_data = []
+
+        self.write = pd.DataFrame(columns = ["Address", "Number of outgoing txs", "Number of incoming txs", "Address source", "Iteration"])
+
+    def decim(self, x):
+        try:
+            s = str(x)
+            return len(s.split(".")[1])
+        except Exception:
+            s = format(x, 'f').rstrip('0').rstrip('.')  
+            if '.' in s:
+                return len(s.split('.')[1])
+            return 0
+        
+    
+    
+    def inputs_analysis(self, inputs, new_iteration):
+        inputs = pd.DataFrame(inputs, columns = ["txid", "input_order", "address", "value"])
+        input_txids = inputs[inputs["address"].isin(new_iteration)]["txid"].unique()
+
+        input_addresses = inputs[inputs["txid"].isin(input_txids)]["address"].unique().tolist()
+        input_addresses = list(set(input_addresses) - set(new_iteration))
+        return input_addresses
+                
+    def change_analysis(self, inputs, outputs, blockchain_data, new_iteration):
+        blockchain_data = pd.DataFrame(blockchain_data, 
+                               columns = ["txid", "num_inputs", "num_outputs", "fee", "mempool_entry_time", "block_height"])
+        input_data = pd.DataFrame(inputs,
+                                    columns = ["txid", "input_order", "address", "value"])
+        output_data = pd.DataFrame(outputs,
+                                columns = ["txid", "output_order", "address", "value"])
+
+        outgoing_txids = input_data[input_data["address"].isin(new_iteration)]["txid"].unique().tolist()
+        change_addresses = []
+
+        for txid in outgoing_txids:
+            input_addresses = input_data[input_data["txid"] == txid]["address"].unique().tolist()
+            output_addresses = output_data[output_data["txid"] == txid]["address"].unique().tolist()
+
+            if set(output_addresses) & set(input_addresses):
+                        continue
+            
+            if len(output_addresses) == 2:
+                address1, address2 = output_addresses[0], output_addresses[1]
+
+                address1_analysis = GetAddressInfo(address1, self.session, self.a, self.proxies_dict_list)
+                address1_analysis.fetch_and_extract()
+                address2_analysis = GetAddressInfo(address2, self.session, self.a, self.proxies_dict_list)
+                address2_analysis.fetch_and_extract()
+
+                r1 = address1_analysis.incoming_count
+                r2 = address2_analysis.incoming_count
+                
+                val1 = output_data[(output_data["txid"] == txid) & (output_data["output_order"] == 0)]["value"].iloc[0]
+                val2 = output_data[(output_data["txid"] == txid) & (output_data["output_order"] == 1)]["value"].iloc[0]
+
+                if r1 == 1 and self.decim(val1)-self.decim(val2) >= 3:
+                    change_addresses.append(address1)
+                if r2 == 1 and self.decim(val2) - self.decim(val1) >= 3:
+                    change_addresses.append(address2)
+            elif len(output_addresses) > 2:
+                count = 0
+                cha = None
+                
+                for address in output_addresses:
+                    address_analysis = GetAddressInfo(address, self.session, self.a, self.proxies_dict_list)
+                    address_analysis.fetch_and_extract()
+                    self.a = address_analysis.a
+                    
+                    if address_analysis.incoming_count == 1:
+                        cha = address
+                        count += 1
+
+                if count == 1 and cha is not None:
+                    change_addresses.append(cha)
+        return change_addresses
+    
+    
+    def heuristic_clus(self):
+        self.new_iteration = [self.start_address]
+        iteration = 0 
+        input_addresses = []
+        change_addresses = []
+        self.old_addresses = [self.start_address]
+
+        while True:
+            for address in self.new_iteration:
+                #Obtaining all transaction information about specific address, such as inputs and outputs
+                new_addresses_info = GetAddressInfo(address, self.session, self.a, self.proxies_dict_list)
+                new_addresses_info.fetch_and_extract()
+                self.inputs += new_addresses_info.batch_tx_inputs
+                self.outputs += new_addresses_info.batch_tx_outputs
+                self.blockchain += new_addresses_info.batch_blockchain_data
+
+                input_addresses += self.inputs_analysis(self.inputs, self.new_iteration)
+                change_addresses += self.change_analysis(self.inputs, self.outputs, self.blockchain, self.new_iteration)
+
+                if iteration == 0:
+                    new_row = pd.DataFrame({
+                        "Address": [address],
+                        "Number of outgoing txs": [new_addresses_info.outgoing_count],
+                        "Number of incoming txs": [new_addresses_info.incoming_count],
+                        "Address source": ["Starting address"],
+                        "Iteration": [iteration]
+                    })
+                    
+                    
+                else:
+                    new_row = pd.DataFrame({
+                        "Address": [address],
+                        "Number of outgoing txs": [new_addresses_info.outgoing_count],
+                        "Number of incoming txs": [new_addresses_info.incoming_count],
+                        "Address source": ["Heuristic  clustering"],
+                        "Iteration": [iteration]
+                    })
+                    
+            iteration += 1
+
+            self.new_addresses = input_addresses + change_addresses
+            
+            self.blockchain_final_data.extend(self.blockchain)
+            self.inputs_final_data.extend(self.inputs)
+            self.outputs_final_data.extend(self.outputs)
+
+            self.inputs = []
+            self.outputs = []
+            self.blockchain = []
+
+            diff_addr = list(set(self.new_addresses) - set(self.old_addresses))
+            if len(diff_addr) == 0:
+                break
+            self.new_iteration = diff_addr
+                
+
+            self.new_addresses = diff_addr
+            self.old_addresses += diff_addr
+            input_addresses = []
+            change_addresses = []
+        
+        self.blockchain_final = pd.DataFrame(
+            self.blockchain_final_data, 
+            columns=["txid", "num_inputs", "num_outputs", "fee", "mempool_entry_time", "block_height"]
+        )
+        
+        self.inputs_final = pd.DataFrame(
+            self.inputs_final_data, 
+            columns=["txid", "input_order", "address", "value"]
+        )
+        
+        self.outputs_final = pd.DataFrame(
+            self.outputs_final_data, 
+            columns=["txid", "output_order", "address", "value"]
+        )
+
+    def get_final_data(self):
+        txs = self.inputs_final[self.inputs_final["address"].isin(self.old_addresses)]["txid"].unique().tolist()
+        database = self.blockchain_final[self.blockchain_final["txid"].isin(txs)]
+        
+        self.db_final = database.drop_duplicates(subset = ["txid"])
+        self.db_final["hour"] = pd.to_datetime(self.db_final["mempool_entry_time"]).dt.hour
+        self.hour_counts = self.db_final.groupby("hour").size()
+        
+        # 2. Reindex to ensure ALL 0-23 hours exist, filling missing with 0
+        all_hours = pd.Series(0, index=range(24))
+        self.hour_counts = self.hour_counts.add(all_hours, fill_value=0)
+        
+        # 3. Create the vector (this is what your model needs)
+        self.total_transactions = self.hour_counts.sum()
+        
+        # 4. Bayesian Normalization
+        # alpha = 1 ensures no column is ever 0 (helps with log-based models)
+        alpha = 1
+        normalized_vector = (self.hour_counts + alpha) / (self.total_transactions + 24 * alpha)
+        
+        # Create a DataFrame for your model/display
+        self.model_df = pd.DataFrame([normalized_vector.values], columns=range(24))
+        self.hour_counts = pd.DataFrame([self.hour_counts.values], columns=range(24))
