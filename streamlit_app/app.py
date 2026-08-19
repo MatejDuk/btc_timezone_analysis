@@ -71,7 +71,7 @@ st.set_page_config(
 @st.cache_resource
 def load_model():
     try:
-        with open('timezone_model.pkl', 'rb') as file:
+        with open('/home/matej/btc_timezone_analysis/model_training/timezone_model.pkl', 'rb') as file:
             data = pickle.load(file)
             return data["model"], data["encoder"]
     except Exception as e:
@@ -85,7 +85,7 @@ def create_histogram(model_row):
     values = model_row.iloc[0].tolist()
     hours = list(range(24))
     fig, ax = plt.subplots(figsize=(10, 5))
-    ax.bar(hours, values, width=1.0, align='edge', color='skyblue', edgecolor='black')
+    ax.bar(hours, values, width=1.0, align='edge', color='steelblue', edgecolor='black')
     ax.set_title("Bitcoin Transaction Activity", size=16)
     ax.set_xlabel("Hour of the Day", size=14)
     ax.set_ylabel("Number of transactions", size=14)
@@ -184,7 +184,6 @@ if type_of_data_collection == "Heuristic clustering":
 
 elif type_of_data_collection == "Data extraction from saved addresses":
     connection.ping(reconnect=True)
-    st.info("This feature is under development. Please check back later.")
     sql = "SELECT * FROM saved_data"
     with connection.cursor() as cursor:
         cursor.execute(sql)

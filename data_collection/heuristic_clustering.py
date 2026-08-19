@@ -1,4 +1,4 @@
-from get_address_info import GetAddressInfo
+from streamlit_app.get_address_info import GetAddressInfo
 import os
 import pymysql
 import pandas as pd
