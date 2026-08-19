@@ -104,7 +104,7 @@ class HeuristicClustering:
             if set(output_addresses) & set(input_addresses):
                         continue
             
-            if len(output_addresses) == 2:
+            elif len(output_addresses) == 2:
                 address1, address2 = output_addresses[0], output_addresses[1]
 
                 r1 = self.html_request(address1, offset=0, in_out="incoming")

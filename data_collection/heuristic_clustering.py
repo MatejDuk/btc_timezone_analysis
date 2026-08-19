@@ -17,6 +17,8 @@ class HeuristicClustering:
         self.db_final = None
         self.total_transactions = None
         self.hour_counts = None
+        self.api_key = os.getenv("API_KEY")
+        self.change_txids = []
 
         self.new_iteration = []
 
@@ -44,6 +46,36 @@ class HeuristicClustering:
                 return len(s.split('.')[1])
             return 0
         
+    def html_request(self, address, offset=0, in_out = "incoming"):
+        url = f"https://api.tatum.io/v3/bitcoin/transaction/address/{address}"
+        params = {
+            "pageSize": 50,
+            "offset": offset,
+            "txType": in_out
+            }
+        headers = {
+            "accept": "application/json",
+            "x-api-key": self.api_key
+            }
+
+        test = True
+        j = 0
+        #start_time = time.time()
+        while test:
+            j += 1
+            r = self.session.get(url, timeout=(100, 100), params=params, headers = headers)
+            code = r.status_code
+            r = r.json()
+            if code == 200:
+                break
+            print(f"Attempt {j} error on {address}")
+            time.sleep(5) 
+            
+        #end_time = time.time()
+        #print(end_time-start_time)
+        #print(address)
+        return r
+        
     
     
     def inputs_analysis(self, inputs, new_iteration):
@@ -66,45 +98,41 @@ class HeuristicClustering:
         change_addresses = []
 
         for txid in outgoing_txids:
-            input_addresses = input_data[input_data["txid"] == txid]["address"].unique().tolist()
-            output_addresses = output_data[output_data["txid"] == txid]["address"].unique().tolist()
+            if txid not in self.change_txids:
+                self.change_txids.append(txid)
+                input_addresses = input_data[input_data["txid"] == txid]["address"].unique().tolist()
+                output_addresses = output_data[output_data["txid"] == txid]["address"].unique().tolist()
 
-            if set(output_addresses) & set(input_addresses):
-                        continue
-            
-            if len(output_addresses) == 2:
-                address1, address2 = output_addresses[0], output_addresses[1]
-
-                address1_analysis = GetAddressInfo(address1, self.session, self.a, self.proxies_dict_list)
-                address1_analysis.fetch_and_extract()
-                address2_analysis = GetAddressInfo(address2, self.session, self.a, self.proxies_dict_list)
-                address2_analysis.fetch_and_extract()
-
-                r1 = address1_analysis.incoming_count
-                r2 = address2_analysis.incoming_count
+                if set(output_addresses) & set(input_addresses):
+                            continue
                 
-                val1 = output_data[(output_data["txid"] == txid) & (output_data["output_order"] == 0)]["value"].iloc[0]
-                val2 = output_data[(output_data["txid"] == txid) & (output_data["output_order"] == 1)]["value"].iloc[0]
+                elif len(output_addresses) == 2:
+                    address1, address2 = output_addresses[0], output_addresses[1]
 
-                if r1 == 1 and self.decim(val1)-self.decim(val2) >= 3:
-                    change_addresses.append(address1)
-                if r2 == 1 and self.decim(val2) - self.decim(val1) >= 3:
-                    change_addresses.append(address2)
-            elif len(output_addresses) > 2:
-                count = 0
-                cha = None
-                
-                for address in output_addresses:
-                    address_analysis = GetAddressInfo(address, self.session, self.a, self.proxies_dict_list)
-                    address_analysis.fetch_and_extract()
-                    self.a = address_analysis.a
+                    r1 = self.html_request(address1, offset=0, in_out="incoming")
+                    r2 = self.html_request(address2, offset=0, in_out="incoming")
                     
-                    if address_analysis.incoming_count == 1:
-                        cha = address
-                        count += 1
+                    val1 = output_data[(output_data["txid"] == txid) & (output_data["output_order"] == 0)]["value"].iloc[0]
+                    val2 = output_data[(output_data["txid"] == txid) & (output_data["output_order"] == 1)]["value"].iloc[0]
 
-                if count == 1 and cha is not None:
-                    change_addresses.append(cha)
+                    if len(r1) == 1 and self.decim(val1)-self.decim(val2) >= 3:
+                        change_addresses.append(address1)
+                    if len(r2) == 1 and self.decim(val2) - self.decim(val1) >= 3:
+                        change_addresses.append(address2)
+                elif len(output_addresses) > 2:
+                    count = 0
+                    cha = None
+                    
+                    for address in output_addresses:
+                        if address != "":
+                            r = self.html_request(address, offset=0, in_out="incoming")
+                        
+                            if len(r) == 1:
+                                cha = address
+                                count += 1
+
+                    if count == 1 and cha is not None:
+                        change_addresses.append(cha)
         return change_addresses
     
     
@@ -120,32 +148,33 @@ class HeuristicClustering:
                 #Obtaining all transaction information about specific address, such as inputs and outputs
                 new_addresses_info = GetAddressInfo(address, self.session, self.a, self.proxies_dict_list)
                 new_addresses_info.fetch_and_extract()
+                self.a = new_addresses_info.a
                 self.inputs += new_addresses_info.batch_tx_inputs
                 self.outputs += new_addresses_info.batch_tx_outputs
                 self.blockchain += new_addresses_info.batch_blockchain_data
 
-                input_addresses += self.inputs_analysis(self.inputs, self.new_iteration)
-                change_addresses += self.change_analysis(self.inputs, self.outputs, self.blockchain, self.new_iteration)
+            input_addresses += self.inputs_analysis(self.inputs, self.new_iteration)
+            change_addresses += self.change_analysis(self.inputs, self.outputs, self.blockchain, self.new_iteration)
 
-                if iteration == 0:
-                    new_row = pd.DataFrame({
-                        "Address": [address],
-                        "Number of outgoing txs": [new_addresses_info.outgoing_count],
-                        "Number of incoming txs": [new_addresses_info.incoming_count],
-                        "Address source": ["Starting address"],
-                        "Iteration": [iteration]
-                    })
-                    
-                    
-                else:
-                    new_row = pd.DataFrame({
-                        "Address": [address],
-                        "Number of outgoing txs": [new_addresses_info.outgoing_count],
-                        "Number of incoming txs": [new_addresses_info.incoming_count],
-                        "Address source": ["Heuristic  clustering"],
-                        "Iteration": [iteration]
-                    })
-                    
+            if iteration == 0:
+                new_row = pd.DataFrame({
+                    "Address": [address],
+                    "Number of outgoing txs": [new_addresses_info.outgoing_count],
+                    "Number of incoming txs": [new_addresses_info.incoming_count],
+                    "Address source": ["Starting address"],
+                    "Iteration": [iteration]
+                })
+                
+                
+            else:
+                new_row = pd.DataFrame({
+                    "Address": [address],
+                    "Number of outgoing txs": [new_addresses_info.outgoing_count],
+                    "Number of incoming txs": [new_addresses_info.incoming_count],
+                    "Address source": ["Heuristic  clustering"],
+                    "Iteration": [iteration]
+                })
+                
             iteration += 1
 
             self.new_addresses = input_addresses + change_addresses
@@ -159,10 +188,11 @@ class HeuristicClustering:
             self.blockchain = []
 
             diff_addr = list(set(self.new_addresses) - set(self.old_addresses))
+            print(diff_addr)
             if len(diff_addr) == 0:
                 break
             self.new_iteration = diff_addr
-                
+            
 
             self.new_addresses = diff_addr
             self.old_addresses += diff_addr
