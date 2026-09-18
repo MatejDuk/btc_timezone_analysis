@@ -230,3 +230,4 @@ Webshare_100_proxies.txt
 
 .model_training/plots
 .model_training/backend.db
+.model_training/mlruns_artifacts
