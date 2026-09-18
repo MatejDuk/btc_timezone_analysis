@@ -4,6 +4,7 @@ import requests_cache
 import time
 import datetime
 import math
+from dotenv import load_dotenv
 
 class GetAddressInfo:
     def __init__(self, address, session):
@@ -39,7 +40,7 @@ class GetAddressInfo:
             r = r.json()
             if code == 200:
                 break
-            print(f"Attempt {j} error on {self.address}")
+            print(f"Attempt {j} error on {self.address}: {code} GAI")
             time.sleep(5) 
         #end_time = time.time()
         #print(end_time-start_time)

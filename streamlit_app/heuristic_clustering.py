@@ -69,7 +69,7 @@ class HeuristicClustering:
             r = r.json()
             if code == 200:
                 break
-            print(f"Attempt {j} error on {address}")
+            print(f"Attempt {j} error on {address}: {code}")
             time.sleep(5) 
             
         #end_time = time.time()
@@ -246,6 +246,7 @@ class HeuristicClustering:
         # Create a DataFrame for your model/display
         self.model_df = pd.DataFrame([normalized_vector.values], columns=range(24))
         self.hour_counts = pd.DataFrame([self.hour_counts.values], columns=range(24))
+
 
 
 

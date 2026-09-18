@@ -146,7 +146,7 @@ class HeuristicClustering:
         while True:
             for address in self.new_iteration:
                 #Obtaining all transaction information about specific address, such as inputs and outputs
-                new_addresses_info = GetAddressInfo(address, self.session, self.a, self.proxies_dict_list)
+                new_addresses_info = GetAddressInfo(address, self.session)
                 new_addresses_info.fetch_and_extract()
                 self.a = new_addresses_info.a
                 self.inputs += new_addresses_info.batch_tx_inputs
