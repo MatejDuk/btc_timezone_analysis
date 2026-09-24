@@ -226,7 +226,8 @@ api_cache.sqlite
 
 Webshare_100_proxies.txt
 
-.model_training/test.ipynb
+test.ipynb
+test2.ipynb
 
 model_training/plots/
 model_training/backend.db
