@@ -215,7 +215,7 @@ marimo/_lsp/
 __marimo__/
 
 # Streamlit
-.streamlit/secrets.toml
+streamlit_app/.streamlit/secrets.toml
 
 # Api cache
 api_cache.sqlite

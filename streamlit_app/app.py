@@ -2,6 +2,7 @@ from multiprocessing.dummy import connection
 import streamlit as st
 import pickle
 import pandas as pd
+import xgboost as xgb
 import numpy as np
 import pymysql
 import os
