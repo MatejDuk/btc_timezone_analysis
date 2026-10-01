@@ -72,7 +72,7 @@ st.set_page_config(
 @st.cache_resource
 def load_model():
     try:
-        with open('timezone_model.pkl', 'rb') as file:
+        with open('./timezone_model.pkl', 'rb') as file:
             data = pickle.load(file)
             return data["model"], data["encoder"]
     except Exception as e:
