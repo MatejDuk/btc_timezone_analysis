@@ -72,7 +72,9 @@ st.set_page_config(
 @st.cache_resource
 def load_model():
     try:
-        with open('./timezone_model.pkl', 'rb') as file:
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        model_path = os.path.join(current_dir, "timezone_model.pkl")
+        with open(model_path, 'rb') as file:
             data = pickle.load(file)
             return data["model"], data["encoder"]
     except Exception as e:
