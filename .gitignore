@@ -229,6 +229,6 @@ Webshare_100_proxies.txt
 test.ipynb
 test2.ipynb
 
-model_training/plots/
-model_training/backend.db
-model_training/mlruns_artifacts/
+03_model_training/plots/
+03_model_training/backend.db
+03_model_training/mlruns_artifacts/
