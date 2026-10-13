@@ -232,3 +232,4 @@ test2.ipynb
 03_model_training/plots/
 03_model_training/backend.db
 03_model_training/mlruns_artifacts/
+03_model_training/mlflow.db
