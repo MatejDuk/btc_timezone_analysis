@@ -45,7 +45,7 @@ The production-ready codebase for the interactive web deployment.
 
 An interactive version of the predictive model is deployed via Streamlit Community Cloud. Users can manually adjust transaction frequencies across a 24-hour UTC cycle to observe how temporal shifts impact the XGBoost model's regional predictions.
 
-**👉 Try the app here:** [Bitcoin Time Zone Predictor](https://timezoneanalysis.streamlit.app/)
+**👉 Try the app here:** [Bitcoin Time Zone Predictor](https://btctimezoneanalysis.streamlit.app/)
 
 ---
 
