@@ -308,22 +308,20 @@ elif type_of_data_collection == "Data extraction from saved addresses":
 st.write("---")
 st.title("2. Data Visualisation")
 
+# Change the button logic to flip a boolean state
 if st.button("Generate Transaction Histogram"):
     if st.session_state.model_row is not None:
-        fig = create_histogram(st.session_state.row)
-        
-        # Save to session state so they persist across reruns
-        st.session_state.fig = fig
+        st.session_state.show_histogram = True  # Use a boolean flag instead of storing the fig
         st.success("✅ Analysis complete!")
     else:
         st.warning("No data found. Run Data Collection first!")
         
-# Always display the histogram if it exists in state
-if st.session_state.fig:
-    st.pyplot(st.session_state.fig)
+if st.session_state.get("show_histogram", False):
+    # Recreate the figure freshly on every rerun
+    fig = create_histogram(st.session_state.row)
+    st.pyplot(fig)
     st.dataframe(st.session_state.model_row)
-    st.write(f"Model Input Vector Prepared ({st.session_state.total_transactions} transactions). You can save this into database or download it for future use.")
-    
+    st.write(f"Model Input Vector Prepared ({st.session_state.total_transactions} transactions)...")
     if type_of_data_collection == "Heuristic clustering":
         save_btn = st.button("Save to Database")
         if save_btn:
