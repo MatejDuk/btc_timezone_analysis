@@ -89,7 +89,6 @@ def load_model():
 
 model, encoder = load_model()
 
-@st.cache_data
 def create_histogram(model_row):
     values = model_row.iloc[0].tolist()
     hours = list(range(24))
