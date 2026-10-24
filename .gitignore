@@ -233,4 +233,3 @@ test2.ipynb
 03_model_training/backend.db
 03_model_training/mlruns_artifacts/
 03_model_training/mlflow.db
-03_nodel_training/graphs_creation.ipynb
