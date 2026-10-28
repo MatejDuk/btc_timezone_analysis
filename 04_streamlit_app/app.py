@@ -90,20 +90,42 @@ model, encoder = load_model()
 
 
 def create_histogram(row_data):
-    # Safely flatten & cast to numeric floats regardless of Series, DataFrame, or object dtype
+    # Safely convert any input (DataFrame, Series, list, or Decimal/object) into 24 floats
     values = pd.to_numeric(np.asarray(row_data).flatten(), errors="coerce")
-    values = np.nan_to_num(values, nan=0.0)
+    values = np.nan_to_num(values, nan=0.0)[:24]
     hours = list(range(24))
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    ax.bar(hours, values, width=1.0, align='edge', color='steelblue', edgecolor='black')
-    ax.set_title("Bitcoin Transaction Activity", size=16)
-    ax.set_xlabel("Hour of the Day", size=14)
-    ax.set_ylabel("Number of transactions", size=14)
-    ax.set_xticks(np.arange(24) + 0.5)
-    ax.set_xticklabels(range(24))
-    ax.set_xlim(0, 24)
-    plt.tight_layout()
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=hours,
+                y=values,
+                marker=dict(
+                    color="steelblue",
+                    line=dict(color="black", width=1)
+                ),
+                width=1.0,
+                hovertemplate="<b>Hour %{x}:00 - %{x}:59 UTC</b><br>Transactions: %{y}<extra></extra>"
+            )
+        ]
+    )
+
+    fig.update_layout(
+        title=dict(text="Bitcoin Transaction Activity", font=dict(size=18)),
+        xaxis=dict(
+            title="Hour of the Day (UTC)",
+            tickmode="array",
+            tickvals=hours,
+            ticktext=[str(h) for h in hours],
+            range=[-0.5, 23.5]
+        ),
+        yaxis=dict(title="Number of Transactions"),
+        bargap=0,
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        margin=dict(l=20, r=20, t=50, b=20),
+        height=400
+    )
     return fig
 
 
@@ -342,20 +364,26 @@ if st.button("Generate Transaction Histogram"):
         st.warning("No data found. Run Data Collection first!")
 
 if st.session_state.get("show_histogram", False) and st.session_state.row is not None:
-    fig = create_histogram(st.session_state.row)
-    st.pyplot(fig)
-    plt.close(fig)  # Free Matplotlib figure from memory immediately
+    fig_hist = create_histogram(st.session_state.row)
+    st.plotly_chart(fig_hist, use_container_width=True)
 
-    st.dataframe(st.session_state.model_row)
+    # Ensure column names are strings so Streamlit Cloud's Arrow serializer doesn't fail
+    display_df = st.session_state.model_row.copy()
+    display_df.columns = [str(col) for col in display_df.columns]
+    st.dataframe(display_df)
+
     st.write(f"Model Input Vector Prepared ({st.session_state.total_transactions} transactions)...")
 
     if type_of_data_collection == "Heuristic clustering":
         if st.button("Save to Database"):
             connection.ping(reconnect=True)
-            data_to_save = (
-                [st.session_state.address, datetime.datetime.now(), st.session_state.total_transactions]
-                + st.session_state.row.iloc[0].tolist()
-            )
+            row_list = pd.to_numeric(np.asarray(st.session_state.row).flatten(), errors="coerce").tolist()
+            data_to_save = [
+                st.session_state.address,
+                datetime.datetime.now(),
+                int(st.session_state.total_transactions)
+            ] + row_list
+
             sql = '''
                 INSERT IGNORE INTO saved_data 
                 (address, save_date, num_of_txs, `0`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `8`, `9`, `10`, `11`, `12`, `13`, `14`, `15`, `16`, `17`, `18`, `19`, `20`, `21`, `22`, `23`) 
@@ -364,7 +392,6 @@ if st.session_state.get("show_histogram", False) and st.session_state.row is not
             with connection.cursor() as cursor:
                 cursor.execute(sql, data_to_save)
             connection.commit()
-            fetch_saved_addresses.clear()
             st.success("✅ Data saved to database successfully!")
 
 
