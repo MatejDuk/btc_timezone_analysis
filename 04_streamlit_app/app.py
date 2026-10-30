@@ -505,15 +505,14 @@ if st.button("Calculate Probabilities", disabled=st.session_state.model_row is N
             marker_line_width=0.4,
             marker_line_color="rgba(100, 100, 100, 0.4)",
             marker_opacity=0.45,
+            hovertemplate=(
+                "<b>%{hovertext}</b><br><br>"
+                "Region: %{customdata[1]}<br>"
+                "Probability: %{customdata[2]}<br>"
+                "Offset: %{customdata[3]}<br>"
+                "Key Places: %{customdata[4]}<extra></extra>"
+            ),
             selector=dict(type='choropleth')
-        )
-
-        fig.data[0].hovertemplate = (
-            "<b>%{hovertext}</b><br><br>"
-            "Region: %{customdata[0]}<br>"
-            "Probability: %{customdata[1]}<br>"
-            "Offset: %{customdata[2]}<br>"
-            "Key Places: %{customdata[3]}<extra></extra>"
         )
 
         fig.update_layout(
